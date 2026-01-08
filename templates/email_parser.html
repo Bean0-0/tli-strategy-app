@@ -23,8 +23,8 @@
             </div>
         </div>
         
-        <button onclick="testGmailConnection()" class="btn btn-secondary">Test Connection</button>
-        <button onclick="fetchFromGmail()" class="btn btn-primary">Fetch Emails</button>
+        <button id="test-connection-btn" class="btn btn-secondary">Test Connection</button>
+        <button id="fetch-gmail-btn" class="btn btn-primary">Fetch Emails</button>
     </div>
 </div>
 
@@ -47,7 +47,7 @@
             <textarea id="email-content" rows="15" placeholder="Paste email content here..."></textarea>
         </div>
         
-        <button onclick="parseEmail()" class="btn btn-primary">Parse Email</button>
+        <button id="parse-email-btn" class="btn btn-primary">Parse Email</button>
     </div>
 </div>
 
@@ -198,41 +198,8 @@ async function parseGmailEmail(messageId) {
             return;
         }
         
-        // Display the parsed data
-        const parsed = result.parsed_data;
-        
-        // Display symbols
-        let symbolsHtml = '<div class="symbols">';
-        if (parsed.symbols && parsed.symbols.length > 0) {
-            parsed.symbols.forEach(symbol => {
-                symbolsHtml += `<span class="symbol-tag">$${symbol}</span>`;
-            });
-        } else {
-            symbolsHtml += '<p>No symbols found</p>';
-        }
-        symbolsHtml += '</div>';
-        document.getElementById('symbols-list').innerHTML = symbolsHtml;
-        
-        // Display levels
-        let levelsHtml = '<table class="levels-table"><thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>';
-        if (parsed.levels && parsed.levels.length > 0) {
-            parsed.levels.forEach(level => {
-                levelsHtml += `<tr>
-                    <td><strong>$${level.symbol}</strong></td>
-                    <td><span class="badge">${level.type}</span></td>
-                    <td>$${level.price.toFixed(2)}</td>
-                    <td>${level.notes || '-'}</td>
-                </tr>`;
-            });
-        } else {
-            levelsHtml += '<tr><td colspan="4">No levels found</td></tr>';
-        }
-        levelsHtml += '</tbody></table>';
-        document.getElementById('levels-list').innerHTML = levelsHtml;
-        
-        // Display notes
-        const notesHtml = parsed.notes ? `<pre>${parsed.notes}</pre>` : '<p>No notes extracted</p>';
-        document.getElementById('notes-content').innerHTML = notesHtml;
+        // Display the parsed data using safe DOM methods
+        displayParsedData(result.parsed_data);
         
         document.getElementById('parse-results').style.display = 'block';
         
@@ -242,6 +209,104 @@ async function parseGmailEmail(messageId) {
         document.getElementById('parse-results').scrollIntoView({ behavior: 'smooth' });
     } catch (error) {
         alert(`Error parsing email: ${error.message}`);
+    }
+}
+
+// Helper function to safely display parsed data
+function displayParsedData(parsed) {
+    // Display symbols safely
+    const symbolsList = document.getElementById('symbols-list');
+    symbolsList.innerHTML = '';
+    
+    const symbolsContainer = document.createElement('div');
+    symbolsContainer.className = 'symbols';
+    
+    if (parsed.symbols && parsed.symbols.length > 0) {
+        parsed.symbols.forEach(symbol => {
+            const symbolTag = document.createElement('span');
+            symbolTag.className = 'symbol-tag';
+            symbolTag.textContent = `$${symbol}`;
+            symbolsContainer.appendChild(symbolTag);
+        });
+    } else {
+        const noSymbols = document.createElement('p');
+        noSymbols.textContent = 'No symbols found';
+        symbolsContainer.appendChild(noSymbols);
+    }
+    
+    symbolsList.appendChild(symbolsContainer);
+    
+    // Display levels safely
+    const levelsList = document.getElementById('levels-list');
+    levelsList.innerHTML = '';
+    
+    const table = document.createElement('table');
+    table.className = 'levels-table';
+    
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Symbol', 'Type', 'Price', 'Notes'].forEach(headerText => {
+        const th = document.createElement('th');
+        th.textContent = headerText;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    const tbody = document.createElement('tbody');
+    
+    if (parsed.levels && parsed.levels.length > 0) {
+        parsed.levels.forEach(level => {
+            const row = document.createElement('tr');
+            
+            const symbolCell = document.createElement('td');
+            const symbolStrong = document.createElement('strong');
+            symbolStrong.textContent = `$${level.symbol}`;
+            symbolCell.appendChild(symbolStrong);
+            
+            const typeCell = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = level.type;
+            typeCell.appendChild(badge);
+            
+            const priceCell = document.createElement('td');
+            priceCell.textContent = `$${level.price.toFixed(2)}`;
+            
+            const notesCell = document.createElement('td');
+            notesCell.textContent = level.notes || '-';
+            
+            row.appendChild(symbolCell);
+            row.appendChild(typeCell);
+            row.appendChild(priceCell);
+            row.appendChild(notesCell);
+            
+            tbody.appendChild(row);
+        });
+    } else {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 4;
+        cell.textContent = 'No levels found';
+        row.appendChild(cell);
+        tbody.appendChild(row);
+    }
+    
+    table.appendChild(tbody);
+    levelsList.appendChild(table);
+    
+    // Display notes safely
+    const notesContent = document.getElementById('notes-content');
+    notesContent.innerHTML = '';
+    
+    if (parsed.notes) {
+        const pre = document.createElement('pre');
+        pre.textContent = parsed.notes;
+        notesContent.appendChild(pre);
+    } else {
+        const p = document.createElement('p');
+        p.textContent = 'No notes extracted';
+        notesContent.appendChild(p);
     }
 }
 
@@ -266,38 +331,8 @@ async function parseEmail() {
     
     const result = await response.json();
     
-    // Display symbols
-    let symbolsHtml = '<div class="symbols">';
-    if (result.symbols && result.symbols.length > 0) {
-        result.symbols.forEach(symbol => {
-            symbolsHtml += `<span class="symbol-tag">$${symbol}</span>`;
-        });
-    } else {
-        symbolsHtml += '<p>No symbols found</p>';
-    }
-    symbolsHtml += '</div>';
-    document.getElementById('symbols-list').innerHTML = symbolsHtml;
-    
-    // Display levels
-    let levelsHtml = '<table class="levels-table"><thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>';
-    if (result.levels && result.levels.length > 0) {
-        result.levels.forEach(level => {
-            levelsHtml += `<tr>
-                <td><strong>$${level.symbol}</strong></td>
-                <td><span class="badge">${level.type}</span></td>
-                <td>$${level.price.toFixed(2)}</td>
-                <td>${level.notes || '-'}</td>
-            </tr>`;
-        });
-    } else {
-        levelsHtml += '<tr><td colspan="4">No levels found</td></tr>';
-    }
-    levelsHtml += '</tbody></table>';
-    document.getElementById('levels-list').innerHTML = levelsHtml;
-    
-    // Display notes
-    const notesHtml = result.notes ? `<pre>${result.notes}</pre>` : '<p>No notes extracted</p>';
-    document.getElementById('notes-content').innerHTML = notesHtml;
+    // Display parsed data using safe DOM methods
+    displayParsedData(result);
     
     document.getElementById('parse-results').style.display = 'block';
     
@@ -305,5 +340,12 @@ async function parseEmail() {
         alert(`Successfully parsed! Found ${result.symbols.length} symbols and ${result.levels.length} price levels. Data has been saved to the database.`);
     }
 }
+
+// Add event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('test-connection-btn').addEventListener('click', testGmailConnection);
+    document.getElementById('fetch-gmail-btn').addEventListener('click', fetchFromGmail);
+    document.getElementById('parse-email-btn').addEventListener('click', parseEmail);
+});
 </script>
 {% endblock %}
