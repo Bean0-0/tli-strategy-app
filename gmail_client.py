@@ -2,6 +2,7 @@
 import os
 import pickle
 import base64
+import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from email.mime.text import MIMEText
@@ -11,6 +12,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # If modifying these scopes, delete the file token.pickle
@@ -48,8 +53,14 @@ class GmailClient:
         
         # Check if token file exists
         if os.path.exists(self.token_path):
-            with open(self.token_path, 'rb') as token:
-                creds = pickle.load(token)
+            try:
+                with open(self.token_path, 'rb') as token:
+                    creds = pickle.load(token)
+            except (pickle.UnpicklingError, EOFError) as e:
+                logger.error(f"Error loading token file: {e}")
+                # Remove corrupted token file
+                os.remove(self.token_path)
+                creds = None
         
         # If there are no (valid) credentials available, let the user log in
         if not creds or not creds.valid:
@@ -57,24 +68,27 @@ class GmailClient:
                 try:
                     creds.refresh(Request())
                 except Exception as e:
-                    print(f"Error refreshing token: {e}")
+                    logger.error(f"Error refreshing token: {e}")
                     # If refresh fails, delete token and re-authenticate
                     if os.path.exists(self.token_path):
                         os.remove(self.token_path)
                     return False
             else:
                 if not os.path.exists(self.credentials_path):
-                    print(f"Error: credentials.json not found at {self.credentials_path}")
-                    print("Please download credentials.json from Google Cloud Console")
-                    print("See GMAIL_SETUP.md for instructions")
+                    logger.error(f"credentials.json not found at {self.credentials_path}")
+                    logger.info("Please download credentials.json from Google Cloud Console")
+                    logger.info("See GMAIL_SETUP.md for instructions")
                     return False
                 
                 try:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials_path, SCOPES)
                     creds = flow.run_local_server(port=0)
+                except (ValueError, FileNotFoundError) as e:
+                    logger.error(f"Error reading credentials file: {e}")
+                    return False
                 except Exception as e:
-                    print(f"Error during OAuth flow: {e}")
+                    logger.error(f"Error during OAuth flow: {e}")
                     return False
             
             # Save the credentials for the next run
@@ -88,7 +102,7 @@ class GmailClient:
             self.service = build('gmail', 'v1', credentials=creds)
             return True
         except HttpError as error:
-            print(f'An error occurred building Gmail service: {error}')
+            logger.error(f'An error occurred building Gmail service: {error}')
             return False
     
     def get_forwarded_emails(self, max_results: int = 10, 
@@ -126,7 +140,7 @@ class GmailClient:
             messages = results.get('messages', [])
             
             if not messages:
-                print('No forwarded emails found.')
+                logger.info('No forwarded emails found.')
                 return []
             
             # Fetch full message details
@@ -139,7 +153,7 @@ class GmailClient:
             return emails
             
         except HttpError as error:
-            print(f'An error occurred fetching emails: {error}')
+            logger.error(f'An error occurred fetching emails: {error}')
             return []
     
     def _get_email_details(self, message_id: str) -> Optional[Dict[str, Any]]:
@@ -184,8 +198,30 @@ class GmailClient:
             }
             
         except HttpError as error:
-            print(f'An error occurred getting email details: {error}')
+            logger.error(f'An error occurred getting email details: {error}')
             return None
+    
+    def _decode_base64_body(self, data: str) -> str:
+        """
+        Safely decode base64 email body data
+        
+        Args:
+            data: Base64 encoded string
+            
+        Returns:
+            Decoded string or empty string on error
+        """
+        try:
+            decoded_bytes = base64.urlsafe_b64decode(data)
+            return decoded_bytes.decode('utf-8')
+        except (base64.binascii.Error, UnicodeDecodeError) as e:
+            logger.warning(f'Error decoding email body: {e}')
+            # Try with latin-1 encoding as fallback
+            try:
+                decoded_bytes = base64.urlsafe_b64decode(data)
+                return decoded_bytes.decode('latin-1')
+            except Exception:
+                return ''
     
     def _get_message_body(self, payload: Dict[str, Any]) -> str:
         """
@@ -204,21 +240,18 @@ class GmailClient:
             for part in payload['parts']:
                 if part['mimeType'] == 'text/plain':
                     if 'data' in part['body']:
-                        body += base64.urlsafe_b64decode(
-                            part['body']['data']).decode('utf-8')
+                        body += self._decode_base64_body(part['body']['data'])
                 elif part['mimeType'] == 'text/html':
                     # If no plain text, use HTML as fallback
                     if not body and 'data' in part['body']:
-                        body += base64.urlsafe_b64decode(
-                            part['body']['data']).decode('utf-8')
+                        body += self._decode_base64_body(part['body']['data'])
                 elif 'parts' in part:
                     # Nested parts (recursive)
                     body += self._get_message_body(part)
         else:
             # Single part message
             if 'data' in payload.get('body', {}):
-                body = base64.urlsafe_b64decode(
-                    payload['body']['data']).decode('utf-8')
+                body = self._decode_base64_body(payload['body']['data'])
         
         return body
     
@@ -255,7 +288,7 @@ class GmailClient:
             return emails
             
         except HttpError as error:
-            print(f'An error occurred searching emails: {error}')
+            logger.error(f'An error occurred searching emails: {error}')
             return []
     
     def get_email_by_id(self, message_id: str) -> Optional[Dict[str, Any]]:
@@ -288,11 +321,11 @@ class GmailClient:
         try:
             # Try to get user profile to test connection
             profile = self.service.users().getProfile(userId='me').execute()
-            print(f"Successfully connected to Gmail account: {profile['emailAddress']}")
-            print(f"Total messages: {profile.get('messagesTotal', 'N/A')}")
+            logger.info(f"Successfully connected to Gmail account: {profile['emailAddress']}")
+            logger.info(f"Total messages: {profile.get('messagesTotal', 'N/A')}")
             return True
         except HttpError as error:
-            print(f'Connection test failed: {error}')
+            logger.error(f'Connection test failed: {error}')
             return False
 
 

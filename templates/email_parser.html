@@ -125,23 +125,54 @@ async function fetchFromGmail() {
         }
         
         // Display emails
-        let emailsHtml = '<div class="emails-list">';
-        result.emails.forEach(email => {
-            emailsHtml += `
-                <div class="email-item">
-                    <div class="email-header">
-                        <strong>${email.subject}</strong>
-                        <span class="email-date">${email.date}</span>
-                    </div>
-                    <div class="email-from">From: ${email.sender}</div>
-                    <div class="email-snippet">${email.snippet}</div>
-                    <button onclick="parseGmailEmail('${email.id}')" class="btn btn-sm btn-primary">Parse This Email</button>
-                </div>
-            `;
-        });
-        emailsHtml += '</div>';
+        const emailsList = document.getElementById('emails-list');
+        emailsList.innerHTML = '';
         
-        document.getElementById('emails-list').innerHTML = emailsHtml;
+        const emailsContainer = document.createElement('div');
+        emailsContainer.className = 'emails-list';
+        
+        result.emails.forEach(email => {
+            const emailItem = document.createElement('div');
+            emailItem.className = 'email-item';
+            
+            const emailHeader = document.createElement('div');
+            emailHeader.className = 'email-header';
+            
+            const subject = document.createElement('strong');
+            subject.textContent = email.subject;
+            
+            const date = document.createElement('span');
+            date.className = 'email-date';
+            date.textContent = email.date;
+            
+            emailHeader.appendChild(subject);
+            emailHeader.appendChild(date);
+            
+            const emailFrom = document.createElement('div');
+            emailFrom.className = 'email-from';
+            emailFrom.textContent = 'From: ' + email.sender;
+            
+            const emailSnippet = document.createElement('div');
+            emailSnippet.className = 'email-snippet';
+            emailSnippet.textContent = email.snippet;
+            
+            const parseButton = document.createElement('button');
+            parseButton.className = 'btn btn-sm btn-primary';
+            parseButton.textContent = 'Parse This Email';
+            parseButton.dataset.messageId = email.id;
+            parseButton.addEventListener('click', function() {
+                parseGmailEmail(this.dataset.messageId);
+            });
+            
+            emailItem.appendChild(emailHeader);
+            emailItem.appendChild(emailFrom);
+            emailItem.appendChild(emailSnippet);
+            emailItem.appendChild(parseButton);
+            
+            emailsContainer.appendChild(emailItem);
+        });
+        
+        emailsList.appendChild(emailsContainer);
         document.getElementById('gmail-results').style.display = 'block';
         
         alert(`Found ${result.emails.length} forwarded emails. Click "Parse This Email" to extract trading data.`);
