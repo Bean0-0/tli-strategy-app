@@ -11,10 +11,13 @@ A web application for managing the TLi trading strategy, with features to help p
    - Account size management
    - Fibonacci retracement and extension calculator
 
-2. **Email Parser**
+2. **Email Parser & Gmail Integration**
+   - **Gmail API Integration**: Automatically fetch forwarded emails from tli.strategy.app@gmail.com
+   - **Manual Input**: Paste email content directly
    - Extract trading levels from forwarded emails
    - Automatically parse symbols, support/resistance levels
    - Extract fibonacci levels and price targets
+   - OAuth 2.0 secure authentication
 
 3. **Price Alerts System**
    - Set alerts for buy levels
@@ -56,12 +59,33 @@ cd Trading-tool-
 pip install -r requirements.txt
 ```
 
-3. Initialize the database:
+3. Set up Gmail API (Optional - for automatic email fetching):
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Follow the Gmail API setup guide
+# See GMAIL_SETUP.md for detailed instructions
+```
+
+4. Initialize the database:
 ```bash
 python app.py
 ```
 
 The database will be automatically created on first run.
+
+## Gmail API Setup (Optional)
+
+For automatic email fetching from tli.strategy.app@gmail.com:
+
+1. **Quick Setup**: See [GMAIL_SETUP.md](GMAIL_SETUP.md) for detailed step-by-step instructions
+2. **Enable Gmail API** in Google Cloud Console
+3. **Download credentials.json** and place in project root
+4. **Run authentication**: `python gmail_client.py`
+5. **Grant access** when browser opens
+
+**Without Gmail API setup**, you can still manually paste email content in the Email Parser interface.
 
 ## Usage
 
@@ -85,7 +109,7 @@ http://localhost:5000
    - **Calculator**: Position sizing and fibonacci tools
    - **Alerts**: Set and manage price alerts
    - **TLi Notes**: Store strategy comments and plans
-   - **Email Parser**: Extract levels from forwarded emails
+   - **Email Parser**: Extract levels from emails (manual paste or Gmail fetch)
    - **Price Levels**: View all extracted price levels
 
 ## Workflow
@@ -100,6 +124,14 @@ http://localhost:5000
 
 ### Parsing Trading Emails
 
+**Option 1: Fetch from Gmail (Automatic)**
+1. Navigate to Email Parser
+2. Click "Fetch from Gmail" button
+3. Select emails from the list
+4. Click "Parse Selected" to extract data
+5. Symbols and price levels are automatically saved
+
+**Option 2: Manual Paste**
 1. Navigate to Email Parser
 2. Paste the forwarded email content
 3. Click "Parse Email"
@@ -137,6 +169,16 @@ http://localhost:5000
 - Only enable debug in development with `FLASK_DEBUG=true`
 - Database file contains sensitive trading data - protect it appropriately
 - Consider running behind a reverse proxy (nginx) in production
+
+**Gmail API Security:**
+
+- **Never commit** `credentials.json` or `token.pickle` to Git (already in .gitignore)
+- Store Gmail credentials securely - they provide access to your email
+- The app uses **read-only** Gmail access (cannot send or modify emails)
+- OAuth tokens are stored locally in `token.pickle`
+- Tokens automatically refresh when expired
+- To revoke access: Delete `token.pickle` and remove app from [Google Account Security](https://myaccount.google.com/security)
+- See [GMAIL_SETUP.md](GMAIL_SETUP.md) for complete security guidelines
 
 ## Key Trading Principles
 
