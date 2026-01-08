@@ -126,7 +126,7 @@ async function fetchFromGmail() {
         
         // Display emails
         const emailsList = document.getElementById('emails-list');
-        emailsList.innerHTML = '';
+        emailsList.textContent = '';
         
         const emailsContainer = document.createElement('div');
         emailsContainer.className = 'emails-list';
@@ -216,7 +216,7 @@ async function parseGmailEmail(messageId) {
 function displayParsedData(parsed) {
     // Display symbols safely
     const symbolsList = document.getElementById('symbols-list');
-    symbolsList.innerHTML = '';
+    symbolsList.textContent = '';
     
     const symbolsContainer = document.createElement('div');
     symbolsContainer.className = 'symbols';
@@ -238,7 +238,7 @@ function displayParsedData(parsed) {
     
     // Display levels safely
     const levelsList = document.getElementById('levels-list');
-    levelsList.innerHTML = '';
+    levelsList.textContent = '';
     
     const table = document.createElement('table');
     table.className = 'levels-table';
@@ -297,7 +297,7 @@ function displayParsedData(parsed) {
     
     // Display notes safely
     const notesContent = document.getElementById('notes-content');
-    notesContent.innerHTML = '';
+    notesContent.textContent = '';
     
     if (parsed.notes) {
         const pre = document.createElement('pre');
