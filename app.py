@@ -1,9 +1,16 @@
 """TLi Trading Strategy Management Tool - Main Application"""
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
+
+# OAuth imports
+import requests
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -31,12 +38,7 @@ def load_user(user_id):
 # Import helper modules
 from email_parser import parse_trading_email
 from position_calculator import calculate_position_size
-from gmail_client import get_gmail_client
-
-# OAuth imports
-import requests
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+from gmail_client import GmailClient
 
 
 @app.route('/login')
@@ -135,11 +137,13 @@ def callback():
     user.profile_pic = picture
     user.last_login = datetime.utcnow()
     user.access_token = tokens.get('access_token')
-    user.refresh_token = tokens.get('refresh_token', user.refresh_token)  # Keep old refresh token if not provided
+    
+    # Update refresh token only if provided (Google doesn't always return it)
+    if 'refresh_token' in tokens:
+        user.refresh_token = tokens['refresh_token']
     
     # Calculate token expiry
     if 'expires_in' in tokens:
-        from datetime import timedelta
         user.token_expiry = datetime.utcnow() + timedelta(seconds=tokens['expires_in'])
     
     db.session.commit()
@@ -354,18 +358,15 @@ def test_gmail_connection():
     """Test Gmail API connection"""
     try:
         # Use user's stored OAuth credentials
-        from gmail_client import GmailClient
         client = GmailClient(user_email=current_user.email)
         
         # Set credentials from user's stored tokens
         if current_user.access_token:
-            from google.oauth2.credentials import Credentials
             creds = Credentials(
                 token=current_user.access_token,
                 refresh_token=current_user.refresh_token
             )
             client.creds = creds
-            from googleapiclient.discovery import build
             client.service = build('gmail', 'v1', credentials=creds)
             
             success = client.test_connection()
@@ -403,10 +404,6 @@ def fetch_gmail_emails():
         days_back = int(data.get('days_back', 7))
         
         # Use user's stored OAuth credentials
-        from gmail_client import GmailClient
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-        
         client = GmailClient(user_email=current_user.email)
         
         if not current_user.access_token:
@@ -462,10 +459,6 @@ def parse_gmail_email(message_id):
     """Fetch and parse a specific email from Gmail"""
     try:
         # Use user's stored OAuth credentials
-        from gmail_client import GmailClient
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-        
         client = GmailClient(user_email=current_user.email)
         
         if not current_user.access_token:
