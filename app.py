@@ -84,13 +84,6 @@ def callback():
     token_endpoint = google_provider_cfg["token_endpoint"]
     
     # Exchange code for tokens
-    token_url, headers, body = prepare_token_request(
-        token_endpoint,
-        authorization_response=request.url,
-        redirect_url=url_for('callback', _external=True),
-        code=code
-    )
-    
     token_response = requests.post(
         token_endpoint,
         data={
@@ -155,11 +148,6 @@ def callback():
     login_user(user)
     
     return redirect(url_for('index'))
-
-
-def prepare_token_request(token_endpoint, authorization_response, redirect_url, code):
-    """Helper function to prepare token request"""
-    return token_endpoint, {}, {}
 
 
 @app.route('/logout')
