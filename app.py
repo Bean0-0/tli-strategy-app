@@ -15,6 +15,7 @@ db.init_app(app)
 # Import helper modules
 from email_parser import parse_trading_email
 from position_calculator import calculate_position_size
+from gmail_client import get_gmail_client
 
 
 @app.route('/')
@@ -186,6 +187,138 @@ def levels():
     """View price levels"""
     all_levels = PriceLevel.query.order_by(PriceLevel.symbol, PriceLevel.price).all()
     return render_template('levels.html', levels=all_levels)
+
+
+@app.route('/gmail/test-connection', methods=['POST'])
+def test_gmail_connection():
+    """Test Gmail API connection"""
+    try:
+        client = get_gmail_client()
+        success = client.test_connection()
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Gmail connection successful!',
+                'email': client.user_email
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to connect to Gmail. Please check your credentials.'
+            }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route('/gmail/fetch-emails', methods=['POST'])
+def fetch_gmail_emails():
+    """Fetch forwarded emails from Gmail"""
+    try:
+        data = request.json or {}
+        max_results = int(data.get('max_results', 10))
+        days_back = int(data.get('days_back', 7))
+        
+        client = get_gmail_client()
+        
+        # Authenticate if needed
+        if not client.authenticate():
+            return jsonify({
+                'success': False,
+                'message': 'Failed to authenticate with Gmail. Please check credentials.'
+            }), 401
+        
+        # Fetch forwarded emails
+        emails = client.get_forwarded_emails(
+            max_results=max_results,
+            days_back=days_back
+        )
+        
+        if not emails:
+            return jsonify({
+                'success': True,
+                'message': 'No forwarded emails found in the specified time range.',
+                'emails': []
+            })
+        
+        # Return email list
+        return jsonify({
+            'success': True,
+            'message': f'Found {len(emails)} forwarded emails',
+            'emails': [{
+                'id': email['id'],
+                'subject': email['subject'],
+                'sender': email['sender'],
+                'date': email['date'],
+                'snippet': email['snippet']
+            } for email in emails]
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching emails: {str(e)}'
+        }), 500
+
+
+@app.route('/gmail/parse-email/<message_id>', methods=['POST'])
+def parse_gmail_email(message_id):
+    """Fetch and parse a specific email from Gmail"""
+    try:
+        client = get_gmail_client()
+        
+        # Authenticate if needed
+        if not client.authenticate():
+            return jsonify({
+                'success': False,
+                'message': 'Failed to authenticate with Gmail'
+            }), 401
+        
+        # Get email details
+        email = client.get_email_by_id(message_id)
+        
+        if not email:
+            return jsonify({
+                'success': False,
+                'message': 'Email not found'
+            }), 404
+        
+        # Parse email content
+        parsed_data = parse_trading_email(email['body'])
+        
+        # Save price levels to database
+        saved_count = 0
+        if parsed_data['levels']:
+            for level_data in parsed_data['levels']:
+                level = PriceLevel(
+                    symbol=level_data['symbol'],
+                    level_type=level_data['type'],
+                    price=level_data['price'],
+                    notes=level_data.get('notes', '')
+                )
+                db.session.add(level)
+                saved_count += 1
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Parsed email and saved {saved_count} price levels',
+            'email': {
+                'subject': email['subject'],
+                'sender': email['sender'],
+                'date': email['date']
+            },
+            'parsed_data': parsed_data
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error parsing email: {str(e)}'
+        }), 500
 
 
 @app.cli.command()

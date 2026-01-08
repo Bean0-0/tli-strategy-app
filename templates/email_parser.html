@@ -5,8 +5,40 @@
 {% block content %}
 <h1>Email Parser</h1>
 
+<!-- Gmail Fetch Section -->
 <div class="parser-section">
-    <h2>Parse Trading Email</h2>
+    <h2>📧 Fetch from Gmail</h2>
+    <p class="help-text">Automatically fetch forwarded emails from tli.strategy.app@gmail.com (requires Gmail API setup)</p>
+    
+    <div class="form">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max-results">Max Emails</label>
+                <input type="number" id="max-results" value="10" min="1" max="50">
+            </div>
+            
+            <div class="form-group">
+                <label for="days-back">Days Back</label>
+                <input type="number" id="days-back" value="7" min="1" max="30">
+            </div>
+        </div>
+        
+        <button id="test-connection-btn" class="btn btn-secondary">Test Connection</button>
+        <button id="fetch-gmail-btn" class="btn btn-primary">Fetch Emails</button>
+    </div>
+</div>
+
+<!-- Gmail Results -->
+<div id="gmail-results" style="display:none;">
+    <h3>Fetched Emails</h3>
+    <div id="emails-list"></div>
+</div>
+
+<hr style="margin: 2rem 0;">
+
+<!-- Manual Parse Section -->
+<div class="parser-section">
+    <h2>✍️ Manual Parse</h2>
     <p class="help-text">Paste the forwarded email content below. The parser will extract symbols, price levels, and fibonacci levels.</p>
     
     <div class="form">
@@ -15,7 +47,7 @@
             <textarea id="email-content" rows="15" placeholder="Paste email content here..."></textarea>
         </div>
         
-        <button onclick="parseEmail()" class="btn btn-primary">Parse Email</button>
+        <button id="parse-email-btn" class="btn btn-primary">Parse Email</button>
     </div>
 </div>
 
@@ -41,6 +73,244 @@
 
 {% block scripts %}
 <script>
+// Test Gmail API connection
+async function testGmailConnection() {
+    try {
+        const response = await fetch('/gmail/test-connection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`✅ Gmail connection successful!\nConnected to: ${result.email}`);
+        } else {
+            alert(`❌ Connection failed: ${result.message}\n\nPlease check GMAIL_SETUP.md for setup instructions.`);
+        }
+    } catch (error) {
+        alert(`❌ Error: ${error.message}\n\nMake sure Gmail API is configured. See GMAIL_SETUP.md`);
+    }
+}
+
+// Fetch emails from Gmail
+async function fetchFromGmail() {
+    const maxResults = document.getElementById('max-results').value;
+    const daysBack = document.getElementById('days-back').value;
+    
+    try {
+        const response = await fetch('/gmail/fetch-emails', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                max_results: parseInt(maxResults),
+                days_back: parseInt(daysBack)
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            alert(`Error: ${result.message}`);
+            return;
+        }
+        
+        if (result.emails.length === 0) {
+            alert('No forwarded emails found in the specified time range.');
+            return;
+        }
+        
+        // Display emails
+        const emailsList = document.getElementById('emails-list');
+        emailsList.textContent = '';
+        
+        const emailsContainer = document.createElement('div');
+        emailsContainer.className = 'emails-list';
+        
+        result.emails.forEach(email => {
+            const emailItem = document.createElement('div');
+            emailItem.className = 'email-item';
+            
+            const emailHeader = document.createElement('div');
+            emailHeader.className = 'email-header';
+            
+            const subject = document.createElement('strong');
+            subject.textContent = email.subject;
+            
+            const date = document.createElement('span');
+            date.className = 'email-date';
+            date.textContent = email.date;
+            
+            emailHeader.appendChild(subject);
+            emailHeader.appendChild(date);
+            
+            const emailFrom = document.createElement('div');
+            emailFrom.className = 'email-from';
+            emailFrom.textContent = 'From: ' + email.sender;
+            
+            const emailSnippet = document.createElement('div');
+            emailSnippet.className = 'email-snippet';
+            emailSnippet.textContent = email.snippet;
+            
+            const parseButton = document.createElement('button');
+            parseButton.className = 'btn btn-sm btn-primary';
+            parseButton.textContent = 'Parse This Email';
+            parseButton.dataset.messageId = email.id;
+            parseButton.addEventListener('click', function() {
+                parseGmailEmail(this.dataset.messageId);
+            });
+            
+            emailItem.appendChild(emailHeader);
+            emailItem.appendChild(emailFrom);
+            emailItem.appendChild(emailSnippet);
+            emailItem.appendChild(parseButton);
+            
+            emailsContainer.appendChild(emailItem);
+        });
+        
+        emailsList.appendChild(emailsContainer);
+        document.getElementById('gmail-results').style.display = 'block';
+        
+        alert(`Found ${result.emails.length} forwarded emails. Click "Parse This Email" to extract trading data.`);
+    } catch (error) {
+        alert(`Error fetching emails: ${error.message}`);
+    }
+}
+
+// Parse a specific email from Gmail
+async function parseGmailEmail(messageId) {
+    try {
+        const response = await fetch(`/gmail/parse-email/${messageId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            alert(`Error: ${result.message}`);
+            return;
+        }
+        
+        // Display the parsed data using safe DOM methods
+        displayParsedData(result.parsed_data);
+        
+        document.getElementById('parse-results').style.display = 'block';
+        
+        alert(result.message);
+        
+        // Scroll to results
+        document.getElementById('parse-results').scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+        alert(`Error parsing email: ${error.message}`);
+    }
+}
+
+// Helper function to safely display parsed data
+function displayParsedData(parsed) {
+    // Display symbols safely
+    const symbolsList = document.getElementById('symbols-list');
+    symbolsList.textContent = '';
+    
+    const symbolsContainer = document.createElement('div');
+    symbolsContainer.className = 'symbols';
+    
+    if (parsed.symbols && parsed.symbols.length > 0) {
+        parsed.symbols.forEach(symbol => {
+            const symbolTag = document.createElement('span');
+            symbolTag.className = 'symbol-tag';
+            symbolTag.textContent = `$${symbol}`;
+            symbolsContainer.appendChild(symbolTag);
+        });
+    } else {
+        const noSymbols = document.createElement('p');
+        noSymbols.textContent = 'No symbols found';
+        symbolsContainer.appendChild(noSymbols);
+    }
+    
+    symbolsList.appendChild(symbolsContainer);
+    
+    // Display levels safely
+    const levelsList = document.getElementById('levels-list');
+    levelsList.textContent = '';
+    
+    const table = document.createElement('table');
+    table.className = 'levels-table';
+    
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Symbol', 'Type', 'Price', 'Notes'].forEach(headerText => {
+        const th = document.createElement('th');
+        th.textContent = headerText;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    const tbody = document.createElement('tbody');
+    
+    if (parsed.levels && parsed.levels.length > 0) {
+        parsed.levels.forEach(level => {
+            const row = document.createElement('tr');
+            
+            const symbolCell = document.createElement('td');
+            const symbolStrong = document.createElement('strong');
+            symbolStrong.textContent = `$${level.symbol}`;
+            symbolCell.appendChild(symbolStrong);
+            
+            const typeCell = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = level.type;
+            typeCell.appendChild(badge);
+            
+            const priceCell = document.createElement('td');
+            priceCell.textContent = `$${level.price.toFixed(2)}`;
+            
+            const notesCell = document.createElement('td');
+            notesCell.textContent = level.notes || '-';
+            
+            row.appendChild(symbolCell);
+            row.appendChild(typeCell);
+            row.appendChild(priceCell);
+            row.appendChild(notesCell);
+            
+            tbody.appendChild(row);
+        });
+    } else {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 4;
+        cell.textContent = 'No levels found';
+        row.appendChild(cell);
+        tbody.appendChild(row);
+    }
+    
+    table.appendChild(tbody);
+    levelsList.appendChild(table);
+    
+    // Display notes safely
+    const notesContent = document.getElementById('notes-content');
+    notesContent.textContent = '';
+    
+    if (parsed.notes) {
+        const pre = document.createElement('pre');
+        pre.textContent = parsed.notes;
+        notesContent.appendChild(pre);
+    } else {
+        const p = document.createElement('p');
+        p.textContent = 'No notes extracted';
+        notesContent.appendChild(p);
+    }
+}
+
+// Manual parse function (existing)
 async function parseEmail() {
     const content = document.getElementById('email-content').value.trim();
     
@@ -61,38 +331,8 @@ async function parseEmail() {
     
     const result = await response.json();
     
-    // Display symbols
-    let symbolsHtml = '<div class="symbols">';
-    if (result.symbols && result.symbols.length > 0) {
-        result.symbols.forEach(symbol => {
-            symbolsHtml += `<span class="symbol-tag">$${symbol}</span>`;
-        });
-    } else {
-        symbolsHtml += '<p>No symbols found</p>';
-    }
-    symbolsHtml += '</div>';
-    document.getElementById('symbols-list').innerHTML = symbolsHtml;
-    
-    // Display levels
-    let levelsHtml = '<table class="levels-table"><thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>';
-    if (result.levels && result.levels.length > 0) {
-        result.levels.forEach(level => {
-            levelsHtml += `<tr>
-                <td><strong>$${level.symbol}</strong></td>
-                <td><span class="badge">${level.type}</span></td>
-                <td>$${level.price.toFixed(2)}</td>
-                <td>${level.notes || '-'}</td>
-            </tr>`;
-        });
-    } else {
-        levelsHtml += '<tr><td colspan="4">No levels found</td></tr>';
-    }
-    levelsHtml += '</tbody></table>';
-    document.getElementById('levels-list').innerHTML = levelsHtml;
-    
-    // Display notes
-    const notesHtml = result.notes ? `<pre>${result.notes}</pre>` : '<p>No notes extracted</p>';
-    document.getElementById('notes-content').innerHTML = notesHtml;
+    // Display parsed data using safe DOM methods
+    displayParsedData(result);
     
     document.getElementById('parse-results').style.display = 'block';
     
@@ -100,5 +340,12 @@ async function parseEmail() {
         alert(`Successfully parsed! Found ${result.symbols.length} symbols and ${result.levels.length} price levels. Data has been saved to the database.`);
     }
 }
+
+// Add event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('test-connection-btn').addEventListener('click', testGmailConnection);
+    document.getElementById('fetch-gmail-btn').addEventListener('click', fetchFromGmail);
+    document.getElementById('parse-email-btn').addEventListener('click', parseEmail);
+});
 </script>
 {% endblock %}

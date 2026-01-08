@@ -15,3 +15,9 @@ instance/
 .vscode/
 .idea/
 *.log
+
+# Gmail API credentials and tokens
+credentials.json
+token.pickle
+token.json
+client_secret*.json
