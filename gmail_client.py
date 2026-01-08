@@ -83,7 +83,15 @@ class GmailClient:
                 try:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials_path, SCOPES)
-                    creds = flow.run_local_server(port=0)
+                    
+                    # Manual console flow for headless environments
+                    flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+                    auth_url, _ = flow.authorization_url(prompt='consent')
+                    
+                    print('Please go to this URL: {}'.format(auth_url))
+                    code = input('Enter the authorization code: ')
+                    flow.fetch_token(code=code)
+                    creds = flow.credentials
                 except (ValueError, FileNotFoundError) as e:
                     logger.error(f"Error reading credentials file: {e}")
                     return False
@@ -106,7 +114,7 @@ class GmailClient:
             return False
     
     def get_forwarded_emails(self, max_results: int = 10, 
-                            days_back: int = 7) -> List[Dict[str, Any]]:
+                            days_back: int = 7, query_filter: str = None) -> List[Dict[str, Any]]:
         """
         Fetch forwarded emails from Gmail
         
@@ -126,10 +134,17 @@ class GmailClient:
             date_from = datetime.now() - timedelta(days=days_back)
             date_str = date_from.strftime('%Y/%m/%d')
             
-            # Query for forwarded emails
-            # Search for emails with "Fwd:" in subject or forwarded flag
-            query = f'after:{date_str} (subject:Fwd OR subject:FW)'
+            # Query configuration
+            if query_filter:
+                # Use provided query + date filter
+                query = f'after:{date_str} {query_filter}'
+            else:
+                # Default behavior: Query for forwarded emails
+                # Search for emails with "Fwd:" in subject or forwarded flag
+                query = f'after:{date_str} (subject:Fwd OR subject:FW)'
             
+            logger.info(f"Searching Gmail with query: {query}")
+
             # Call the Gmail API
             results = self.service.users().messages().list(
                 userId='me',

@@ -47,8 +47,10 @@ def main():
     # Step 3: Fetch forwarded emails
     print("Step 3: Fetching forwarded emails...")
     print("-" * 70)
-    print("Searching for emails with 'Fwd:' in subject from the last 30 days...")
-    emails = client.get_forwarded_emails(max_results=5, days_back=30)
+    print("Searching for ALL emails from the last 30 days...")
+    # emails = client.get_forwarded_emails(max_results=5, days_back=30)
+    # Use days_back=30 to look back further, and query_filter="" to get everything
+    emails = client.get_forwarded_emails(max_results=5, days_back=30, query_filter=" ")
     
     if not emails:
         print("No forwarded emails found.")
