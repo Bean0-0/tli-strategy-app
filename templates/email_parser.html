@@ -5,8 +5,40 @@
 {% block content %}
 <h1>Email Parser</h1>
 
+<!-- Gmail Fetch Section -->
 <div class="parser-section">
-    <h2>Parse Trading Email</h2>
+    <h2>📧 Fetch from Gmail</h2>
+    <p class="help-text">Automatically fetch forwarded emails from tli.strategy.app@gmail.com (requires Gmail API setup)</p>
+    
+    <div class="form">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max-results">Max Emails</label>
+                <input type="number" id="max-results" value="10" min="1" max="50">
+            </div>
+            
+            <div class="form-group">
+                <label for="days-back">Days Back</label>
+                <input type="number" id="days-back" value="7" min="1" max="30">
+            </div>
+        </div>
+        
+        <button onclick="testGmailConnection()" class="btn btn-secondary">Test Connection</button>
+        <button onclick="fetchFromGmail()" class="btn btn-primary">Fetch Emails</button>
+    </div>
+</div>
+
+<!-- Gmail Results -->
+<div id="gmail-results" style="display:none;">
+    <h3>Fetched Emails</h3>
+    <div id="emails-list"></div>
+</div>
+
+<hr style="margin: 2rem 0;">
+
+<!-- Manual Parse Section -->
+<div class="parser-section">
+    <h2>✍️ Manual Parse</h2>
     <p class="help-text">Paste the forwarded email content below. The parser will extract symbols, price levels, and fibonacci levels.</p>
     
     <div class="form">
@@ -41,6 +73,148 @@
 
 {% block scripts %}
 <script>
+// Test Gmail API connection
+async function testGmailConnection() {
+    try {
+        const response = await fetch('/gmail/test-connection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`✅ Gmail connection successful!\nConnected to: ${result.email}`);
+        } else {
+            alert(`❌ Connection failed: ${result.message}\n\nPlease check GMAIL_SETUP.md for setup instructions.`);
+        }
+    } catch (error) {
+        alert(`❌ Error: ${error.message}\n\nMake sure Gmail API is configured. See GMAIL_SETUP.md`);
+    }
+}
+
+// Fetch emails from Gmail
+async function fetchFromGmail() {
+    const maxResults = document.getElementById('max-results').value;
+    const daysBack = document.getElementById('days-back').value;
+    
+    try {
+        const response = await fetch('/gmail/fetch-emails', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                max_results: parseInt(maxResults),
+                days_back: parseInt(daysBack)
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            alert(`Error: ${result.message}`);
+            return;
+        }
+        
+        if (result.emails.length === 0) {
+            alert('No forwarded emails found in the specified time range.');
+            return;
+        }
+        
+        // Display emails
+        let emailsHtml = '<div class="emails-list">';
+        result.emails.forEach(email => {
+            emailsHtml += `
+                <div class="email-item">
+                    <div class="email-header">
+                        <strong>${email.subject}</strong>
+                        <span class="email-date">${email.date}</span>
+                    </div>
+                    <div class="email-from">From: ${email.sender}</div>
+                    <div class="email-snippet">${email.snippet}</div>
+                    <button onclick="parseGmailEmail('${email.id}')" class="btn btn-sm btn-primary">Parse This Email</button>
+                </div>
+            `;
+        });
+        emailsHtml += '</div>';
+        
+        document.getElementById('emails-list').innerHTML = emailsHtml;
+        document.getElementById('gmail-results').style.display = 'block';
+        
+        alert(`Found ${result.emails.length} forwarded emails. Click "Parse This Email" to extract trading data.`);
+    } catch (error) {
+        alert(`Error fetching emails: ${error.message}`);
+    }
+}
+
+// Parse a specific email from Gmail
+async function parseGmailEmail(messageId) {
+    try {
+        const response = await fetch(`/gmail/parse-email/${messageId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            alert(`Error: ${result.message}`);
+            return;
+        }
+        
+        // Display the parsed data
+        const parsed = result.parsed_data;
+        
+        // Display symbols
+        let symbolsHtml = '<div class="symbols">';
+        if (parsed.symbols && parsed.symbols.length > 0) {
+            parsed.symbols.forEach(symbol => {
+                symbolsHtml += `<span class="symbol-tag">$${symbol}</span>`;
+            });
+        } else {
+            symbolsHtml += '<p>No symbols found</p>';
+        }
+        symbolsHtml += '</div>';
+        document.getElementById('symbols-list').innerHTML = symbolsHtml;
+        
+        // Display levels
+        let levelsHtml = '<table class="levels-table"><thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>';
+        if (parsed.levels && parsed.levels.length > 0) {
+            parsed.levels.forEach(level => {
+                levelsHtml += `<tr>
+                    <td><strong>$${level.symbol}</strong></td>
+                    <td><span class="badge">${level.type}</span></td>
+                    <td>$${level.price.toFixed(2)}</td>
+                    <td>${level.notes || '-'}</td>
+                </tr>`;
+            });
+        } else {
+            levelsHtml += '<tr><td colspan="4">No levels found</td></tr>';
+        }
+        levelsHtml += '</tbody></table>';
+        document.getElementById('levels-list').innerHTML = levelsHtml;
+        
+        // Display notes
+        const notesHtml = parsed.notes ? `<pre>${parsed.notes}</pre>` : '<p>No notes extracted</p>';
+        document.getElementById('notes-content').innerHTML = notesHtml;
+        
+        document.getElementById('parse-results').style.display = 'block';
+        
+        alert(result.message);
+        
+        // Scroll to results
+        document.getElementById('parse-results').scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+        alert(`Error parsing email: ${error.message}`);
+    }
+}
+
+// Manual parse function (existing)
 async function parseEmail() {
     const content = document.getElementById('email-content').value.trim();
     
