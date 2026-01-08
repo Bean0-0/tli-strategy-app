@@ -67,6 +67,10 @@ The database will be automatically created on first run.
 
 1. Start the application:
 ```bash
+# Development mode (with debug)
+FLASK_DEBUG=true python app.py
+
+# Production mode (recommended)
 python app.py
 ```
 
@@ -119,6 +123,21 @@ http://localhost:5000
    - General Market Comment: Overall market thoughts
 3. Add notes and reference them when making decisions
 
+## Security
+
+**⚠️ Important Security Notes:**
+
+- The app uses a default development secret key. **Change this in production!**
+- Set `SECRET_KEY` environment variable:
+  ```bash
+  export SECRET_KEY='your-secure-random-key-here'
+  python app.py
+  ```
+- Debug mode is **disabled by default** for security
+- Only enable debug in development with `FLASK_DEBUG=true`
+- Database file contains sensitive trading data - protect it appropriately
+- Consider running behind a reverse proxy (nginx) in production
+
 ## Key Trading Principles
 
 The tool is designed to help enforce these key principles:
@@ -135,6 +154,11 @@ The tool is designed to help enforce these key principles:
 - **Database**: SQLite
 - **Frontend**: HTML, CSS, JavaScript
 - **Styling**: Custom CSS with modern design
+
+## Documentation
+
+- **QUICKSTART.md**: Step-by-step usage guide
+- **IMPLEMENTATION.md**: Technical details and architecture
 
 ## License
 
