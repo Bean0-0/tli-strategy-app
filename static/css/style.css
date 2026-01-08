@@ -103,6 +103,43 @@ body {
     padding: 0 2rem;
 }
 
+/* Flash Messages */
+.flash-messages {
+    margin-bottom: 1.5rem;
+}
+
+.flash {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border-left: 4px solid;
+    font-weight: 500;
+}
+
+.flash.error {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #ef4444;
+}
+
+.flash.info {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #3b82f6;
+}
+
+.flash.success {
+    background: #d1fae5;
+    color: #065f46;
+    border-color: #10b981;
+}
+
+.flash.warning {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #f59e0b;
+}
+
 /* Strategy Reminders */
 .strategy-reminders {
     display: grid;

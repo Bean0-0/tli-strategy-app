@@ -1,23 +1,18 @@
 """TLi Trading Strategy Management Tool - Main Application"""
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from datetime import datetime, timedelta
 import os
-import json
-
-# OAuth imports
 import requests
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trading.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Google OAuth configuration
+# Google OAuth configuration (optional - only needed if using Google login)
 app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
 app.config['GOOGLE_DISCOVERY_URL'] = "https://accounts.google.com/.well-known/openid-configuration"
@@ -30,6 +25,7 @@ db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -38,20 +34,51 @@ def load_user(user_id):
 # Import helper modules
 from email_parser import parse_trading_email
 from position_calculator import calculate_position_size
-from gmail_client import GmailClient
+from gmail_client import get_gmail_client
 
 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page"""
+    """Login page with username/password or Google OAuth"""
     if current_user.is_authenticated:
         return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            
+            next_page = request.args.get('next')
+            return redirect(next_page if next_page else url_for('index'))
+        else:
+            flash('Invalid username or password', 'error')
+    
     return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Logout user"""
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
 
 
 @app.route('/login/google')
 def login_google():
     """Initiate Google OAuth flow"""
+    # Check if Google OAuth is configured
+    if not app.config['GOOGLE_CLIENT_ID'] or not app.config['GOOGLE_CLIENT_SECRET']:
+        flash('Google login is not configured. Please use username/password login.', 'warning')
+        return redirect(url_for('login'))
+    
     # Get Google OAuth configuration
     google_provider_cfg = requests.get(app.config['GOOGLE_DISCOVERY_URL']).json()
     authorization_endpoint = google_provider_cfg["authorization_endpoint"]
@@ -64,7 +91,7 @@ def login_google():
         f"response_type=code&"
         f"client_id={app.config['GOOGLE_CLIENT_ID']}&"
         f"redirect_uri={redirect_uri}&"
-        f"scope=openid%20email%20profile%20https://www.googleapis.com/auth/gmail.readonly&"
+        f"scope=openid%20email%20profile&"
         f"access_type=offline&"
         f"prompt=consent"
     )
@@ -79,7 +106,8 @@ def callback():
     code = request.args.get('code')
     
     if not code:
-        return "Error: No authorization code received", 400
+        flash('Google login failed. Please try again.', 'error')
+        return redirect(url_for('login'))
     
     # Get Google OAuth configuration
     google_provider_cfg = requests.get(app.config['GOOGLE_DISCOVERY_URL']).json()
@@ -99,7 +127,8 @@ def callback():
     )
     
     if token_response.status_code != 200:
-        return f"Error getting tokens: {token_response.text}", 400
+        flash('Google login failed. Please try again.', 'error')
+        return redirect(url_for('login'))
     
     tokens = token_response.json()
     
@@ -110,8 +139,9 @@ def callback():
             google_requests.Request(),
             app.config['GOOGLE_CLIENT_ID']
         )
-    except ValueError as e:
-        return f"Error verifying token: {str(e)}", 400
+    except ValueError:
+        flash('Google login failed. Please try again.', 'error')
+        return redirect(url_for('login'))
     
     # Extract user info
     google_id = idinfo['sub']
@@ -123,49 +153,43 @@ def callback():
     user = User.query.filter_by(google_id=google_id).first()
     
     if not user:
+        # Create username from email
+        username = email.split('@')[0]
+        # Make sure username is unique
+        base_username = username
+        counter = 1
+        while User.query.filter_by(username=username).first():
+            username = f"{base_username}{counter}"
+            counter += 1
+        
         user = User(
-            google_id=google_id,
+            username=username,
             email=email,
+            google_id=google_id,
             name=name,
             profile_pic=picture,
             created_at=datetime.utcnow()
         )
         db.session.add(user)
     
-    # Update user info and tokens
+    # Update user info and last login
     user.name = name
     user.profile_pic = picture
     user.last_login = datetime.utcnow()
-    user.access_token = tokens.get('access_token')
-    
-    # Update refresh token only if provided (Google doesn't always return it)
-    if 'refresh_token' in tokens:
-        user.refresh_token = tokens['refresh_token']
-    
-    # Calculate token expiry
-    if 'expires_in' in tokens:
-        user.token_expiry = datetime.utcnow() + timedelta(seconds=tokens['expires_in'])
-    
     db.session.commit()
     
     # Log in user
     login_user(user)
+    flash(f'Welcome back, {user.name or user.username}!', 'success')
     
     return redirect(url_for('index'))
-
-
-@app.route('/logout')
-@login_required
-def logout():
-    """Logout user"""
-    logout_user()
-    return redirect(url_for('login'))
 
 
 @app.route('/')
 @login_required
 def index():
     """Dashboard - Main view"""
+    # Show user-specific data
     positions = Position.query.filter_by(user_id=current_user.id).order_by(Position.created_at.desc()).all()
     alerts = Alert.query.filter_by(user_id=current_user.id, triggered=False).order_by(Alert.price).all()
     recent_comments = TLiComment.query.filter_by(user_id=current_user.id).order_by(TLiComment.created_at.desc()).limit(5).all()
@@ -179,8 +203,7 @@ def index():
                          large_caps=large_caps,
                          small_caps=small_caps,
                          alerts=alerts,
-                         comments=recent_comments,
-                         user=current_user)
+                         comments=recent_comments)
 
 
 @app.route('/positions')
@@ -357,35 +380,19 @@ def levels():
 def test_gmail_connection():
     """Test Gmail API connection"""
     try:
-        # Use user's stored OAuth credentials
-        client = GmailClient(user_email=current_user.email)
+        client = get_gmail_client()
+        success = client.test_connection()
         
-        # Set credentials from user's stored tokens
-        if current_user.access_token:
-            creds = Credentials(
-                token=current_user.access_token,
-                refresh_token=current_user.refresh_token
-            )
-            client.creds = creds
-            client.service = build('gmail', 'v1', credentials=creds)
-            
-            success = client.test_connection()
-            
-            if success:
-                return jsonify({
-                    'success': True,
-                    'message': 'Gmail connection successful!',
-                    'email': current_user.email
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': 'Failed to connect to Gmail. Please re-authenticate.'
-                }), 400
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Gmail connection successful!',
+                'email': client.user_email
+            })
         else:
             return jsonify({
                 'success': False,
-                'message': 'No Gmail credentials found. Please log in again to grant Gmail access.'
+                'message': 'Failed to connect to Gmail. Please check your credentials.'
             }), 400
     except Exception as e:
         return jsonify({
@@ -403,22 +410,14 @@ def fetch_gmail_emails():
         max_results = int(data.get('max_results', 10))
         days_back = int(data.get('days_back', 7))
         
-        # Use user's stored OAuth credentials
-        client = GmailClient(user_email=current_user.email)
+        client = get_gmail_client()
         
-        if not current_user.access_token:
+        # Authenticate if needed
+        if not client.authenticate():
             return jsonify({
                 'success': False,
-                'message': 'No Gmail access. Please log in again to grant Gmail permissions.'
+                'message': 'Failed to authenticate with Gmail. Please check credentials.'
             }), 401
-        
-        # Set credentials from user's stored tokens
-        creds = Credentials(
-            token=current_user.access_token,
-            refresh_token=current_user.refresh_token
-        )
-        client.creds = creds
-        client.service = build('gmail', 'v1', credentials=creds)
         
         # Fetch forwarded emails
         emails = client.get_forwarded_emails(
@@ -458,22 +457,14 @@ def fetch_gmail_emails():
 def parse_gmail_email(message_id):
     """Fetch and parse a specific email from Gmail"""
     try:
-        # Use user's stored OAuth credentials
-        client = GmailClient(user_email=current_user.email)
+        client = get_gmail_client()
         
-        if not current_user.access_token:
+        # Authenticate if needed
+        if not client.authenticate():
             return jsonify({
                 'success': False,
-                'message': 'No Gmail access. Please log in again.'
+                'message': 'Failed to authenticate with Gmail'
             }), 401
-        
-        # Set credentials from user's stored tokens
-        creds = Credentials(
-            token=current_user.access_token,
-            refresh_token=current_user.refresh_token
-        )
-        client.creds = creds
-        client.service = build('gmail', 'v1', credentials=creds)
         
         # Get email details
         email = client.get_email_by_id(message_id)

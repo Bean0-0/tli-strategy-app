@@ -20,7 +20,7 @@
                 <li><a href="{{ url_for('levels') }}">Price Levels</a></li>
                 {% if current_user.is_authenticated %}
                 <li class="user-menu">
-                    <span class="user-name">{{ current_user.name or current_user.email }}</span>
+                    <span class="user-name">{{ current_user.name or current_user.username }}</span>
                     <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
                 </li>
                 {% endif %}
@@ -29,6 +29,16 @@
     </nav>
     
     <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
         {% block content %}{% endblock %}
     </div>
     
