@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - TLi Trading Tool</title>
+    <title>Register - TLi Trading Tool</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         .login-container {
@@ -55,132 +55,84 @@
             font-size: 1rem;
         }
         
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        .btn-primary {
+        .submit-btn {
             width: 100%;
             padding: 0.75rem;
-            background: #667eea;
+            background-color: #667eea;
             color: white;
             border: none;
             border-radius: 5px;
             font-size: 1rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.3s ease;
+            transition: background-color 0.2s;
         }
         
-        .btn-primary:hover {
-            background: #5568d3;
+        .submit-btn:hover {
+            background-color: #5a6fd1;
         }
         
         .divider {
+            margin: 2rem 0;
             display: flex;
             align-items: center;
-            text-align: center;
-            margin: 2rem 0;
+            color: #999;
         }
         
-        .divider::before,
-        .divider::after {
-            content: '';
+        .divider::before, .divider::after {
+            content: "";
             flex: 1;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #eee;
         }
         
         .divider span {
             padding: 0 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .login-link {
+            text-align: center;
+            margin-top: 1.5rem;
             color: #666;
             font-size: 0.9rem;
         }
         
-        .google-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.75rem;
-            width: 100%;
-            padding: 0.75rem;
-            background: white;
-            color: #333;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
+        .login-link a {
+            color: #667eea;
             text-decoration: none;
-            transition: all 0.3s ease;
-        }
-        
-        .google-btn:hover {
-            background: #f5f5f5;
-            border-color: #999;
-        }
-        
-        .google-icon {
-            width: 20px;
-            height: 20px;
+            font-weight: 500;
         }
         
         .flash-messages {
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            width: 100%;
         }
         
         .flash {
             padding: 0.75rem;
             border-radius: 5px;
             margin-bottom: 0.5rem;
+            text-align: center;
         }
         
         .flash.error {
-            background: #fee;
-            color: #c33;
-            border: 1px solid #fcc;
-        }
-        
-        .flash.info {
-            background: #e3f2fd;
-            color: #1976d2;
-            border: 1px solid #90caf9;
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
         }
         
         .flash.success {
-            background: #e8f5e9;
-            color: #388e3c;
-            border: 1px solid #a5d6a7;
-        }
-        
-        .flash.warning {
-            background: #fff3e0;
-            color: #f57c00;
-            border: 1px solid #ffcc80;
-        }
-
-        .register-link {
-            text-align: center;
-            margin-top: 1.5rem;
-            color: #666;
-        }
-
-        .register-link a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        
-        .register-link a:hover {
-            text-decoration: underline;
+            background-color: #d1fae5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
         <div class="login-box">
-            <h1>🚀 TLi Trading Tool</h1>
-            <p>Sign in to access your trading dashboard</p>
+            <h1>Create Account</h1>
+            <p>TLi Strategy Manager</p>
             
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -192,7 +144,7 @@
                 {% endif %}
             {% endwith %}
             
-            <form method="POST" action="{{ url_for('login') }}">
+            <form method="POST" action="{{ url_for('register') }}">
                 <div class="form-group">
                     <label for="email">Email Address</label>
                     <input type="email" id="email" name="email" required autofocus>
@@ -203,11 +155,16 @@
                     <input type="password" id="password" name="password" required>
                 </div>
                 
-                <button type="submit" class="btn-primary">Sign In</button>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                </div>
+                
+                <button type="submit" class="submit-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Register</button>
             </form>
             
-            <div class="register-link">
-                Don't have an account? <a href="{{ url_for('register') }}">Create Account</a>
+            <div class="login-link">
+                Already have an account? <a href="{{ url_for('login') }}">Sign In</a>
             </div>
         </div>
     </div>

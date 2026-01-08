@@ -4,18 +4,11 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from datetime import datetime, timedelta
 import os
 import requests
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trading.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Google OAuth configuration (optional - only needed if using Google login)
-app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
-app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
-app.config['GOOGLE_DISCOVERY_URL'] = "https://accounts.google.com/.well-known/openid-configuration"
 
 # Initialize database
 from models import db, User, Position, PriceLevel, Alert, TLiComment
@@ -37,6 +30,52 @@ from position_calculator import calculate_position_size
 from gmail_client import get_gmail_client
 
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """User registration"""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Generate username from email
+        username = email.split('@')[0]
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return redirect(url_for('register'))
+        
+        # Ensure username is unique
+        base_username = username
+        counter = 1
+        while User.query.filter_by(username=username).first():
+            username = f"{base_username}{counter}"
+            counter += 1
+            
+        if User.query.filter_by(email=email).first():
+            flash('Email already registered', 'error')
+            return redirect(url_for('register'))
+        
+        # Create new user
+        new_user = User(
+            username=username,
+            email=email,
+            created_at=datetime.utcnow()
+        )
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        flash('Registration successful! Please login.', 'success')
+        return redirect(url_for('login'))
+        
+    return render_template('register.html')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page with username/password or Google OAuth"""
@@ -44,10 +83,10 @@ def login():
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        username = request.form.get('username')
+        email = request.form.get('email')
         password = request.form.get('password')
         
-        user = User.query.filter_by(username=username).first()
+        user = User.query.filter_by(email=email).first()
         
         if user and user.check_password(password):
             login_user(user)
@@ -69,120 +108,6 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
-
-
-@app.route('/login/google')
-def login_google():
-    """Initiate Google OAuth flow"""
-    # Check if Google OAuth is configured
-    if not app.config['GOOGLE_CLIENT_ID'] or not app.config['GOOGLE_CLIENT_SECRET']:
-        flash('Google login is not configured. Please use username/password login.', 'warning')
-        return redirect(url_for('login'))
-    
-    # Get Google OAuth configuration
-    google_provider_cfg = requests.get(app.config['GOOGLE_DISCOVERY_URL']).json()
-    authorization_endpoint = google_provider_cfg["authorization_endpoint"]
-    
-    # Build OAuth request
-    redirect_uri = url_for('callback', _external=True)
-    
-    request_uri = (
-        f"{authorization_endpoint}?"
-        f"response_type=code&"
-        f"client_id={app.config['GOOGLE_CLIENT_ID']}&"
-        f"redirect_uri={redirect_uri}&"
-        f"scope=openid%20email%20profile&"
-        f"access_type=offline&"
-        f"prompt=consent"
-    )
-    
-    return redirect(request_uri)
-
-
-@app.route('/login/callback')
-def callback():
-    """Handle Google OAuth callback"""
-    # Get authorization code
-    code = request.args.get('code')
-    
-    if not code:
-        flash('Google login failed. Please try again.', 'error')
-        return redirect(url_for('login'))
-    
-    # Get Google OAuth configuration
-    google_provider_cfg = requests.get(app.config['GOOGLE_DISCOVERY_URL']).json()
-    token_endpoint = google_provider_cfg["token_endpoint"]
-    
-    # Exchange code for tokens
-    token_response = requests.post(
-        token_endpoint,
-        data={
-            'code': code,
-            'client_id': app.config['GOOGLE_CLIENT_ID'],
-            'client_secret': app.config['GOOGLE_CLIENT_SECRET'],
-            'redirect_uri': url_for('callback', _external=True),
-            'grant_type': 'authorization_code',
-        },
-        headers={'Content-Type': 'application/x-www-form-urlencoded'}
-    )
-    
-    if token_response.status_code != 200:
-        flash('Google login failed. Please try again.', 'error')
-        return redirect(url_for('login'))
-    
-    tokens = token_response.json()
-    
-    # Verify ID token
-    try:
-        idinfo = id_token.verify_oauth2_token(
-            tokens['id_token'],
-            google_requests.Request(),
-            app.config['GOOGLE_CLIENT_ID']
-        )
-    except ValueError:
-        flash('Google login failed. Please try again.', 'error')
-        return redirect(url_for('login'))
-    
-    # Extract user info
-    google_id = idinfo['sub']
-    email = idinfo['email']
-    name = idinfo.get('name', '')
-    picture = idinfo.get('picture', '')
-    
-    # Find or create user
-    user = User.query.filter_by(google_id=google_id).first()
-    
-    if not user:
-        # Create username from email
-        username = email.split('@')[0]
-        # Make sure username is unique
-        base_username = username
-        counter = 1
-        while User.query.filter_by(username=username).first():
-            username = f"{base_username}{counter}"
-            counter += 1
-        
-        user = User(
-            username=username,
-            email=email,
-            google_id=google_id,
-            name=name,
-            profile_pic=picture,
-            created_at=datetime.utcnow()
-        )
-        db.session.add(user)
-    
-    # Update user info and last login
-    user.name = name
-    user.profile_pic = picture
-    user.last_login = datetime.utcnow()
-    db.session.commit()
-    
-    # Log in user
-    login_user(user)
-    flash(f'Welcome back, {user.name or user.username}!', 'success')
-    
-    return redirect(url_for('index'))
 
 
 @app.route('/')
@@ -523,4 +448,5 @@ if __name__ == '__main__':
         db.create_all()
     # Only use debug mode in development
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    
     app.run(debug=debug_mode, host='0.0.0.0', port=5000)
