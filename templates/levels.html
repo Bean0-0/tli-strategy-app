@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Price Levels - TLi Trading Tool{% endblock %}
+
+{% block content %}
+<h1>Price Levels</h1>
+
+<div class="levels-section">
+    <p class="help-text">Price levels extracted from emails and manually added entries.</p>
+    
+    {% if levels %}
+    <table class="levels-table">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Type</th>
+                <th>Price</th>
+                <th>Notes</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for level in levels %}
+            <tr>
+                <td><strong>${{ level.symbol }}</strong></td>
+                <td><span class="badge badge-{{ level.level_type }}">{{ level.level_type.title() }}</span></td>
+                <td>${{ "%.2f"|format(level.price) }}</td>
+                <td>{{ level.notes or '-' }}</td>
+                <td>{{ level.created_at.strftime('%Y-%m-%d') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No price levels yet. Use the <a href="{{ url_for('email_parser_view') }}">Email Parser</a> to extract levels from emails.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Email Parser - TLi Trading Tool{% endblock %}
+
+{% block content %}
+<h1>Email Parser</h1>
+
+<div class="parser-section">
+    <h2>Parse Trading Email</h2>
+    <p class="help-text">Paste the forwarded email content below. The parser will extract symbols, price levels, and fibonacci levels.</p>
+    
+    <div class="form">
+        <div class="form-group">
+            <label for="email-content">Email Content</label>
+            <textarea id="email-content" rows="15" placeholder="Paste email content here..."></textarea>
+        </div>
+        
+        <button onclick="parseEmail()" class="btn btn-primary">Parse Email</button>
+    </div>
+</div>
+
+<div id="parse-results" style="display:none;">
+    <h2>Parsed Results</h2>
+    
+    <div class="results-section">
+        <h3>Symbols Found</h3>
+        <div id="symbols-list"></div>
+    </div>
+    
+    <div class="results-section">
+        <h3>Price Levels Extracted</h3>
+        <div id="levels-list"></div>
+    </div>
+    
+    <div class="results-section">
+        <h3>Notes</h3>
+        <div id="notes-content"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function parseEmail() {
+    const content = document.getElementById('email-content').value.trim();
+    
+    if (!content) {
+        alert('Please paste email content');
+        return;
+    }
+    
+    const response = await fetch('/email-parser/parse', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            email_content: content
+        })
+    });
+    
+    const result = await response.json();
+    
+    // Display symbols
+    let symbolsHtml = '<div class="symbols">';
+    if (result.symbols && result.symbols.length > 0) {
+        result.symbols.forEach(symbol => {
+            symbolsHtml += `<span class="symbol-tag">$${symbol}</span>`;
+        });
+    } else {
+        symbolsHtml += '<p>No symbols found</p>';
+    }
+    symbolsHtml += '</div>';
+    document.getElementById('symbols-list').innerHTML = symbolsHtml;
+    
+    // Display levels
+    let levelsHtml = '<table class="levels-table"><thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>';
+    if (result.levels && result.levels.length > 0) {
+        result.levels.forEach(level => {
+            levelsHtml += `<tr>
+                <td><strong>$${level.symbol}</strong></td>
+                <td><span class="badge">${level.type}</span></td>
+                <td>$${level.price.toFixed(2)}</td>
+                <td>${level.notes || '-'}</td>
+            </tr>`;
+        });
+    } else {
+        levelsHtml += '<tr><td colspan="4">No levels found</td></tr>';
+    }
+    levelsHtml += '</tbody></table>';
+    document.getElementById('levels-list').innerHTML = levelsHtml;
+    
+    // Display notes
+    const notesHtml = result.notes ? `<pre>${result.notes}</pre>` : '<p>No notes extracted</p>';
+    document.getElementById('notes-content').innerHTML = notesHtml;
+    
+    document.getElementById('parse-results').style.display = 'block';
+    
+    if (result.levels && result.levels.length > 0) {
+        alert(`Successfully parsed! Found ${result.symbols.length} symbols and ${result.levels.length} price levels. Data has been saved to the database.`);
+    }
+}
+</script>
+{% endblock %}

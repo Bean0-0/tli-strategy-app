@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Position Calculator - TLi Trading Tool{% endblock %}
+
+{% block content %}
+<h1>Position Sizing Calculator</h1>
+
+<div class="calculator-container">
+    <div class="calculator-form">
+        <h2>Calculate Position Size</h2>
+        
+        <div class="form-group">
+            <label for="account_size">Account Size ($) *</label>
+            <input type="number" id="account_size" step="0.01" placeholder="10000" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="risk_percent">Risk Percentage (%) *</label>
+            <input type="number" id="risk_percent" step="0.1" placeholder="1.0" value="1.0" required>
+            <p class="help-text">Typically 1-2% per trade</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="entry_price">Entry Price ($) *</label>
+            <input type="number" id="entry_price" step="0.01" placeholder="150.00" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="stop_loss">Stop Loss Price ($) *</label>
+            <input type="number" id="stop_loss" step="0.01" placeholder="145.00" required>
+        </div>
+        
+        <button onclick="calculatePosition()" class="btn btn-primary">Calculate</button>
+    </div>
+    
+    <div class="calculator-results" id="results" style="display:none;">
+        <h2>Results</h2>
+        <div class="result-item">
+            <span class="label">Shares to Buy:</span>
+            <span class="value" id="result-shares">-</span>
+        </div>
+        <div class="result-item">
+            <span class="label">Position Size:</span>
+            <span class="value" id="result-position-size">-</span>
+        </div>
+        <div class="result-item">
+            <span class="label">Position % of Account:</span>
+            <span class="value" id="result-position-percent">-</span>
+        </div>
+        <div class="result-item">
+            <span class="label">Risk Amount:</span>
+            <span class="value" id="result-risk-amount">-</span>
+        </div>
+        <div class="result-item">
+            <span class="label">Risk % of Account:</span>
+            <span class="value" id="result-risk-percent">-</span>
+        </div>
+        <div class="result-item">
+            <span class="label">Risk per Share:</span>
+            <span class="value" id="result-risk-per-share">-</span>
+        </div>
+    </div>
+    
+    <div class="fib-calculator">
+        <h2>Fibonacci Calculator</h2>
+        
+        <div class="form-group">
+            <label for="fib_high">Swing High ($) *</label>
+            <input type="number" id="fib_high" step="0.01" placeholder="200.00">
+        </div>
+        
+        <div class="form-group">
+            <label for="fib_low">Swing Low ($) *</label>
+            <input type="number" id="fib_low" step="0.01" placeholder="150.00">
+        </div>
+        
+        <button onclick="calculateFib()" class="btn btn-primary">Calculate Fibs</button>
+        
+        <div id="fib-results" style="display:none;">
+            <h3>Retracement Levels</h3>
+            <div id="fib-retracements"></div>
+            
+            <h3>Extension Levels</h3>
+            <div id="fib-extensions"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function calculatePosition() {
+    const accountSize = parseFloat(document.getElementById('account_size').value);
+    const riskPercent = parseFloat(document.getElementById('risk_percent').value);
+    const entryPrice = parseFloat(document.getElementById('entry_price').value);
+    const stopLoss = parseFloat(document.getElementById('stop_loss').value);
+    
+    if (!accountSize || !riskPercent || !entryPrice || !stopLoss) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    const response = await fetch('/calculator/calculate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            account_size: accountSize,
+            risk_percent: riskPercent,
+            entry_price: entryPrice,
+            stop_loss: stopLoss
+        })
+    });
+    
+    const result = await response.json();
+    
+    if (result.error) {
+        alert(result.error);
+        return;
+    }
+    
+    document.getElementById('result-shares').textContent = result.shares;
+    document.getElementById('result-position-size').textContent = formatCurrency(result.position_size);
+    document.getElementById('result-position-percent').textContent = formatPercent(result.position_percent);
+    document.getElementById('result-risk-amount').textContent = formatCurrency(result.risk_amount);
+    document.getElementById('result-risk-percent').textContent = formatPercent(result.risk_percent);
+    document.getElementById('result-risk-per-share').textContent = formatCurrency(result.risk_per_share);
+    
+    document.getElementById('results').style.display = 'block';
+}
+
+function calculateFib() {
+    const high = parseFloat(document.getElementById('fib_high').value);
+    const low = parseFloat(document.getElementById('fib_low').value);
+    
+    if (!high || !low) {
+        alert('Please fill in both high and low values');
+        return;
+    }
+    
+    const diff = high - low;
+    
+    // Retracement levels
+    const retracements = {
+        '0%': high,
+        '23.6%': high - (diff * 0.236),
+        '38.2%': high - (diff * 0.382),
+        '50%': high - (diff * 0.5),
+        '61.8%': high - (diff * 0.618),
+        '78.6%': high - (diff * 0.786),
+        '100%': low
+    };
+    
+    // Extension levels
+    const extensions = {
+        '127.2%': high + (diff * 0.272),
+        '161.8%': high + (diff * 0.618),
+        '200%': high + diff,
+        '261.8%': high + (diff * 1.618),
+        '423.6%': high + (diff * 3.236)
+    };
+    
+    // Display retracements
+    let retHtml = '<div class="fib-levels">';
+    for (const [level, price] of Object.entries(retracements)) {
+        retHtml += `<div class="fib-level"><span>${level}:</span> <strong>${formatCurrency(price)}</strong></div>`;
+    }
+    retHtml += '</div>';
+    document.getElementById('fib-retracements').innerHTML = retHtml;
+    
+    // Display extensions
+    let extHtml = '<div class="fib-levels">';
+    for (const [level, price] of Object.entries(extensions)) {
+        extHtml += `<div class="fib-level"><span>${level}:</span> <strong>${formatCurrency(price)}</strong></div>`;
+    }
+    extHtml += '</div>';
+    document.getElementById('fib-extensions').innerHTML = extHtml;
+    
+    document.getElementById('fib-results').style.display = 'block';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts - TLi Trading Tool{% endblock %}
+
+{% block content %}
+<h1>Price Alerts</h1>
+
+<div class="alerts-section">
+    <h2>Add New Alert</h2>
+    <div class="form-inline">
+        <input type="text" id="alert-symbol" placeholder="Symbol (e.g., AMD)" />
+        <input type="number" id="alert-price" step="0.01" placeholder="Price" />
+        <select id="alert-type">
+            <option value="buy">Buy Level</option>
+            <option value="sell">Sell Level</option>
+            <option value="fib_extension">Fib Extension</option>
+        </select>
+        <input type="text" id="alert-notes" placeholder="Notes (optional)" />
+        <button onclick="addAlert()" class="btn btn-primary">Add Alert</button>
+    </div>
+</div>
+
+<div class="alerts-section">
+    <h2>Active Alerts ({{ active_alerts|length }})</h2>
+    {% if active_alerts %}
+    <table class="alerts-table">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Type</th>
+                <th>Notes</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for alert in active_alerts %}
+            <tr>
+                <td><strong>${{ alert.symbol }}</strong></td>
+                <td>${{ "%.2f"|format(alert.price) }}</td>
+                <td><span class="badge badge-{{ alert.alert_type }}">{{ alert.alert_type.replace('_', ' ').title() }}</span></td>
+                <td>{{ alert.notes or '-' }}</td>
+                <td>{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <button onclick="deleteAlert({{ alert.id }})" class="btn btn-danger btn-sm">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No active alerts.</p>
+    {% endif %}
+</div>
+
+<div class="alerts-section">
+    <h2>Recently Triggered Alerts</h2>
+    {% if triggered_alerts %}
+    <table class="alerts-table">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Type</th>
+                <th>Triggered</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for alert in triggered_alerts %}
+            <tr class="triggered">
+                <td><strong>${{ alert.symbol }}</strong></td>
+                <td>${{ "%.2f"|format(alert.price) }}</td>
+                <td>{{ alert.alert_type.replace('_', ' ').title() }}</td>
+                <td>{{ alert.triggered_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No triggered alerts.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function addAlert() {
+    const symbol = document.getElementById('alert-symbol').value.trim().toUpperCase();
+    const price = parseFloat(document.getElementById('alert-price').value);
+    const type = document.getElementById('alert-type').value;
+    const notes = document.getElementById('alert-notes').value.trim();
+    
+    if (!symbol || !price) {
+        alert('Please fill in symbol and price');
+        return;
+    }
+    
+    const response = await fetch('/alerts/add', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            symbol: symbol,
+            price: price,
+            alert_type: type,
+            notes: notes
+        })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+        location.reload();
+    }
+}
+
+async function deleteAlert(alertId) {
+    if (!confirm('Delete this alert?')) {
+        return;
+    }
+    
+    const response = await fetch(`/alerts/${alertId}/delete`, {
+        method: 'POST'
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+        location.reload();
+    }
+}
+</script>
+{% endblock %}
