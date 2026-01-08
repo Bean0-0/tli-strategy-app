@@ -28,7 +28,7 @@ class User(UserMixin, db.Model):
 class Position(db.Model):
     """Trading positions"""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Nullable for migration
     symbol = db.Column(db.String(10), nullable=False)
     position_type = db.Column(db.String(10), nullable=False)  # 'long' or 'short'
     entry_price = db.Column(db.Float, nullable=False)
@@ -81,7 +81,7 @@ class Position(db.Model):
 class PriceLevel(db.Model):
     """Price levels extracted from emails"""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Nullable for migration
     symbol = db.Column(db.String(10), nullable=False)
     level_type = db.Column(db.String(20), nullable=False)  # 'support', 'resistance', 'fib', 'target'
     price = db.Column(db.Float, nullable=False)
@@ -97,7 +97,7 @@ class PriceLevel(db.Model):
 class Alert(db.Model):
     """Price alerts"""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Nullable for migration
     symbol = db.Column(db.String(10), nullable=False)
     price = db.Column(db.Float, nullable=False)
     alert_type = db.Column(db.String(20), nullable=False)  # 'buy', 'sell', 'fib_extension'
@@ -115,7 +115,7 @@ class Alert(db.Model):
 class TLiComment(db.Model):
     """TLi's comments and strategy notes"""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Nullable for migration
     symbol = db.Column(db.String(10))  # Optional, can be general market comment
     comment_type = db.Column(db.String(20), nullable=False)  # 'long_term', 'short_term', 'pullback', 'general'
     content = db.Column(db.Text, nullable=False)

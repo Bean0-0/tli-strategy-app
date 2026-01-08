@@ -2,6 +2,17 @@
 
 A web application for managing the TLi trading strategy, with features to help prevent common trading mistakes and enforce disciplined position management.
 
+## 🔐 NEW: Google OAuth Login System
+
+The app now includes a secure Google OAuth login system that:
+- ✅ Authenticates users with their Google accounts
+- ✅ Automatically syncs with users' forwarded Gmail emails
+- ✅ Provides user-specific data isolation and privacy
+- ✅ Eliminates the need for password management
+- ✅ Enables secure, automatic email fetching
+
+See [OAUTH_SETUP.md](OAUTH_SETUP.md) for detailed setup instructions.
+
 ## Features
 
 ### 🎯 Core Functionality
@@ -12,7 +23,8 @@ A web application for managing the TLi trading strategy, with features to help p
    - Fibonacci retracement and extension calculator
 
 2. **Email Parser & Gmail Integration**
-   - **Gmail API Integration**: Automatically fetch forwarded emails from tli.strategy.app@gmail.com
+   - **Gmail API Integration**: Automatically fetch forwarded emails using OAuth
+   - **User-Specific Syncing**: Each user's emails are synced to their account
    - **Manual Input**: Paste email content directly
    - Extract trading levels from forwarded emails
    - Automatically parse symbols, support/resistance levels
@@ -34,6 +46,11 @@ A web application for managing the TLi trading strategy, with features to help p
    - Separate large cap vs small cap tracking
    - P&L calculation
 
+6. **User Authentication & Data Privacy**
+   - Secure Google OAuth login
+   - User-specific data isolation
+   - Each user has their own positions, alerts, and notes
+
 ### 🛡️ Strategy Enforcement
 
 **Large Cap Strategy (AMD, NVDA, etc.)**
@@ -50,8 +67,8 @@ A web application for managing the TLi trading strategy, with features to help p
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Bean0-0/Trading-tool-.git
-cd Trading-tool-
+git clone https://github.com/Bean0-0/tli-strategy-app.git
+cd tli-strategy-app
 ```
 
 2. Install dependencies:
@@ -59,35 +76,30 @@ cd Trading-tool-
 pip install -r requirements.txt
 ```
 
-3. Set up Gmail API (Optional - for automatic email fetching):
+3. Set up Google OAuth for login and Gmail integration:
 ```bash
 # Copy environment template
 cp .env.example .env
 
-# Follow the Gmail API setup guide
-# See GMAIL_SETUP.md for detailed instructions
+# Follow the OAuth setup guide for detailed instructions
+# See OAUTH_SETUP.md for complete setup instructions
 ```
 
-4. Initialize the database:
+4. Configure your Google OAuth credentials in `.env`:
+   - Get OAuth credentials from Google Cloud Console
+   - Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+   - See [OAUTH_SETUP.md](OAUTH_SETUP.md) for step-by-step instructions
+
+5. Initialize the database:
 ```bash
 python app.py
 ```
 
 The database will be automatically created on first run.
 
-## Gmail API Setup (Optional)
-
-For automatic email fetching from tli.strategy.app@gmail.com:
-
-1. **Quick Setup**: See [GMAIL_SETUP.md](GMAIL_SETUP.md) for detailed step-by-step instructions
-2. **Enable Gmail API** in Google Cloud Console
-3. **Download credentials.json** and place in project root
-4. **Run authentication**: `python gmail_client.py`
-5. **Grant access** when browser opens
-
-**Without Gmail API setup**, you can still manually paste email content in the Email Parser interface.
-
 ## Usage
+
+### First Time Setup
 
 1. Start the application:
 ```bash
@@ -103,16 +115,36 @@ python app.py
 http://localhost:5000
 ```
 
-3. The application includes:
-   - **Dashboard**: Overview of positions, alerts, and recent notes
-   - **Positions**: Manage all trading positions
+3. **Sign in with Google**:
+   - Click "Sign in with Google" on the login page
+   - Choose your Google account
+   - Grant the requested permissions (email, profile, Gmail read access)
+   - You'll be redirected to your personal dashboard
+
+4. The application includes:
+   - **Dashboard**: Overview of your positions, alerts, and recent notes
+   - **Positions**: Manage all your trading positions
    - **Calculator**: Position sizing and fibonacci tools
    - **Alerts**: Set and manage price alerts
    - **TLi Notes**: Store strategy comments and plans
-   - **Email Parser**: Extract levels from emails (manual paste or Gmail fetch)
+   - **Email Parser**: Extract levels from emails (syncs with your Gmail)
    - **Price Levels**: View all extracted price levels
 
+### Email Syncing
+
+The app automatically syncs with forwarded emails in your Gmail account:
+1. Forward trading emails to your Gmail account
+2. Use the "Fetch from Gmail" feature in Email Parser
+3. The app fetches and parses emails using your OAuth credentials
+4. All data is saved to your personal account
+
 ## Workflow
+
+### First Login
+
+1. Click "Sign in with Google"
+2. Authorize the app to access your Gmail
+3. Start adding positions and tracking your trades
 
 ### Adding a Position
 
@@ -129,14 +161,14 @@ http://localhost:5000
 2. Click "Fetch from Gmail" button
 3. Select emails from the list
 4. Click "Parse Selected" to extract data
-5. Symbols and price levels are automatically saved
+5. Symbols and price levels are automatically saved to your account
 
 **Option 2: Manual Paste**
 1. Navigate to Email Parser
 2. Paste the forwarded email content
 3. Click "Parse Email"
 4. Review extracted symbols and price levels
-5. Data is automatically saved to the database
+5. Data is automatically saved to your account
 
 ### Setting Alerts
 
@@ -159,6 +191,16 @@ http://localhost:5000
 
 **⚠️ Important Security Notes:**
 
+### OAuth & Authentication
+
+- **Google OAuth**: Secure authentication with Google accounts
+- **User Isolation**: Each user's data is completely isolated
+- **Automatic Token Management**: OAuth tokens are securely stored and automatically refreshed
+- **Read-Only Gmail Access**: The app can only read emails, not send or delete them
+- See [OAUTH_SETUP.md](OAUTH_SETUP.md) for complete security guidelines
+
+### Application Security
+
 - The app uses a default development secret key. **Change this in production!**
 - Set `SECRET_KEY` environment variable:
   ```bash
@@ -169,16 +211,15 @@ http://localhost:5000
 - Only enable debug in development with `FLASK_DEBUG=true`
 - Database file contains sensitive trading data - protect it appropriately
 - Consider running behind a reverse proxy (nginx) in production
+- **Never commit** `.env` file to Git (already in .gitignore)
+- Store OAuth credentials securely
 
-**Gmail API Security:**
+### Environment Variables
 
-- **Never commit** `credentials.json` or `token.pickle` to Git (already in .gitignore)
-- Store Gmail credentials securely - they provide access to your email
-- The app uses **read-only** Gmail access (cannot send or modify emails)
-- OAuth tokens are stored locally in `token.pickle`
-- Tokens automatically refresh when expired
-- To revoke access: Delete `token.pickle` and remove app from [Google Account Security](https://myaccount.google.com/security)
-- See [GMAIL_SETUP.md](GMAIL_SETUP.md) for complete security guidelines
+Required environment variables (in `.env`):
+- `SECRET_KEY`: Application secret key (generate with `python3 -c "import secrets; print(secrets.token_hex(32))"`)
+- `GOOGLE_CLIENT_ID`: OAuth client ID from Google Cloud Console
+- `GOOGLE_CLIENT_SECRET`: OAuth client secret from Google Cloud Console
 
 ## Key Trading Principles
 

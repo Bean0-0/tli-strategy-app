@@ -187,7 +187,8 @@ def index():
                          large_caps=large_caps,
                          small_caps=small_caps,
                          alerts=alerts,
-                         comments=recent_comments)
+                         comments=recent_comments,
+                         user=current_user)
 
 
 @app.route('/positions')
