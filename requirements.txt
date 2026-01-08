@@ -1,9 +1,12 @@
 Flask==3.0.0
 Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
 email-validator==2.1.1
 python-dotenv==1.0.0
 pytz==2023.3
+requests==2.31.0
 google-auth==2.25.2
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
 google-api-python-client==2.111.0
+werkzeug==3.0.1

@@ -2,37 +2,53 @@
 
 A web application for managing the TLi trading strategy, with features to help prevent common trading mistakes and enforce disciplined position management.
 
+## 🔐 Authentication
+
+The app now includes a user login system with two options:
+- ✅ **Username/Password** - Simple login (works without HTTPS)
+- ✅ **Google OAuth** (Optional) - Sign in with Google account
+
+Each user has their own isolated data (positions, alerts, notes). See [AUTHENTICATION.md](AUTHENTICATION.md) for setup guide.
+
 ## Features
 
 ### 🎯 Core Functionality
 
-1. **Position Sizing Calculator**
+1. **User Authentication**
+   - Username/password login (works on HTTP)
+   - Optional Google OAuth (requires HTTPS)
+   - User-specific data isolation
+   - Session management
+
+2. **Position Sizing Calculator**
    - Risk-based position sizing
    - Account size management
    - Fibonacci retracement and extension calculator
 
-2. **Email Parser & Gmail Integration**
-   - **Gmail API Integration**: Automatically fetch forwarded emails from tli.strategy.app@gmail.com
+3. **Email Parser & Gmail Integration**
+   - **Forwarded Email System**: Forward trading emails to tli.strategy.app@gmail.com
+   - **Gmail API Integration**: App fetches from shared inbox
    - **Manual Input**: Paste email content directly
-   - Extract trading levels from forwarded emails
-   - Automatically parse symbols, support/resistance levels
-   - Extract fibonacci levels and price targets
-   - OAuth 2.0 secure authentication
+   - **Auto-parsing**: Extract symbols, levels, and targets
+   - Each user sees their own analyzed data
 
-3. **Price Alerts System**
+4. **Price Alerts System**
    - Set alerts for buy levels
    - Fibonacci extension alerts
    - Sell target notifications
+   - Personal alert management
 
-4. **TLi Comments & Notes**
+5. **TLi Comments & Notes**
    - Store long-term strategy plans
    - Track short-term expected moves
    - Document pullback expectations
+   - Personal notes per user
 
-5. **Position Management**
+6. **Position Management**
    - Track all positions (open and closed)
    - Separate large cap vs small cap tracking
    - P&L calculation
+   - User-specific position tracking
 
 ### 🛡️ Strategy Enforcement
 
@@ -50,8 +66,8 @@ A web application for managing the TLi trading strategy, with features to help p
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Bean0-0/Trading-tool-.git
-cd Trading-tool-
+git clone https://github.com/Bean0-0/tli-strategy-app.git
+cd tli-strategy-app
 ```
 
 2. Install dependencies:
@@ -59,23 +75,44 @@ cd Trading-tool-
 pip install -r requirements.txt
 ```
 
-3. Set up Gmail API (Optional - for automatic email fetching):
+3. Set up environment:
 ```bash
-# Copy environment template
 cp .env.example .env
-
-# Follow the Gmail API setup guide
-# See GMAIL_SETUP.md for detailed instructions
+# Edit .env and set SECRET_KEY
 ```
 
-4. Initialize the database:
+4. Create first user:
+```bash
+python3 << 'EOF'
+from app import app, db
+from models import User
+
+with app.app_context():
+    db.create_all()
+    user = User(username='admin', email='admin@example.com')
+    user.set_password('changeme')  # Change this!
+    db.session.add(user)
+    db.session.commit()
+    print(f"Created user: {user.username}")
+EOF
+```
+
+5. Run the app:
 ```bash
 python app.py
 ```
 
-The database will be automatically created on first run.
+6. Login at `http://localhost:5000`
 
-## Gmail API Setup (Optional)
+## Authentication Setup
+
+See [AUTHENTICATION.md](AUTHENTICATION.md) for detailed setup guide including:
+- Creating users
+- Configuring Google OAuth (optional)
+- Password management
+- Security best practices
+
+## Gmail API Setup (For Forwarded Emails)
 
 For automatic email fetching from tli.strategy.app@gmail.com:
 
