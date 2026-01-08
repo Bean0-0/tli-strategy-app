@@ -1,1 +1,165 @@
-# Trading-tool-
+# TLi Trading Strategy Management Tool
+
+A web application for managing the TLi trading strategy, with features to help prevent common trading mistakes and enforce disciplined position management.
+
+## Features
+
+### 🎯 Core Functionality
+
+1. **Position Sizing Calculator**
+   - Risk-based position sizing
+   - Account size management
+   - Fibonacci retracement and extension calculator
+
+2. **Email Parser**
+   - Extract trading levels from forwarded emails
+   - Automatically parse symbols, support/resistance levels
+   - Extract fibonacci levels and price targets
+
+3. **Price Alerts System**
+   - Set alerts for buy levels
+   - Fibonacci extension alerts
+   - Sell target notifications
+
+4. **TLi Comments & Notes**
+   - Store long-term strategy plans
+   - Track short-term expected moves
+   - Document pullback expectations
+
+5. **Position Management**
+   - Track all positions (open and closed)
+   - Separate large cap vs small cap tracking
+   - P&L calculation
+
+### 🛡️ Strategy Enforcement
+
+**Large Cap Strategy (AMD, NVDA, etc.)**
+- Visual reminders to LET THEM RUN
+- Designed to prevent premature exits
+- Emphasizes patience with high-quality names
+
+**Small Cap Strategy (OSCR, HIMS, etc.)**
+- Reminders to TRADE AGGRESSIVELY
+- Take profits more actively
+- Manage risk more tightly
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/Bean0-0/Trading-tool-.git
+cd Trading-tool-
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Initialize the database:
+```bash
+python app.py
+```
+
+The database will be automatically created on first run.
+
+## Usage
+
+1. Start the application:
+```bash
+# Development mode (with debug)
+FLASK_DEBUG=true python app.py
+
+# Production mode (recommended)
+python app.py
+```
+
+2. Open your browser and navigate to:
+```
+http://localhost:5000
+```
+
+3. The application includes:
+   - **Dashboard**: Overview of positions, alerts, and recent notes
+   - **Positions**: Manage all trading positions
+   - **Calculator**: Position sizing and fibonacci tools
+   - **Alerts**: Set and manage price alerts
+   - **TLi Notes**: Store strategy comments and plans
+   - **Email Parser**: Extract levels from forwarded emails
+   - **Price Levels**: View all extracted price levels
+
+## Workflow
+
+### Adding a Position
+
+1. Navigate to Positions → Add Position
+2. Enter symbol, entry price, and shares
+3. Mark as "Large Cap" for stocks you should let run (AMD, NVDA)
+4. Leave unchecked for small caps you should trade aggressively (OSCR, HIMS)
+5. Add notes about stop loss, targets, or strategy
+
+### Parsing Trading Emails
+
+1. Navigate to Email Parser
+2. Paste the forwarded email content
+3. Click "Parse Email"
+4. Review extracted symbols and price levels
+5. Data is automatically saved to the database
+
+### Setting Alerts
+
+1. Navigate to Alerts
+2. Add alert with symbol, price, and type
+3. Types: Buy Level, Sell Level, or Fib Extension
+4. View active alerts on dashboard
+
+### Recording TLi Strategy Notes
+
+1. Navigate to TLi Notes
+2. Select note type:
+   - Long Term Plan: Overall strategy direction
+   - Short Term Expected Move: Near-term expectations
+   - Expected Pullback: Where to look for entries
+   - General Market Comment: Overall market thoughts
+3. Add notes and reference them when making decisions
+
+## Security
+
+**⚠️ Important Security Notes:**
+
+- The app uses a default development secret key. **Change this in production!**
+- Set `SECRET_KEY` environment variable:
+  ```bash
+  export SECRET_KEY='your-secure-random-key-here'
+  python app.py
+  ```
+- Debug mode is **disabled by default** for security
+- Only enable debug in development with `FLASK_DEBUG=true`
+- Database file contains sensitive trading data - protect it appropriately
+- Consider running behind a reverse proxy (nginx) in production
+
+## Key Trading Principles
+
+The tool is designed to help enforce these key principles:
+
+1. **Let Large Caps Run**: AMD, NVDA, and similar high-quality names have room to grow
+2. **Trade Small Caps Aggressively**: Take profits and manage risk actively on smaller names
+3. **Follow the Plan**: Reference TLi's comments to stay aligned with the strategy
+4. **Proper Position Sizing**: Use the calculator to ensure appropriate risk per trade
+5. **Watch Key Levels**: Set alerts at important support, resistance, and fib levels
+
+## Technology Stack
+
+- **Backend**: Flask (Python)
+- **Database**: SQLite
+- **Frontend**: HTML, CSS, JavaScript
+- **Styling**: Custom CSS with modern design
+
+## Documentation
+
+- **QUICKSTART.md**: Step-by-step usage guide
+- **IMPLEMENTATION.md**: Technical details and architecture
+
+## License
+
+MIT License

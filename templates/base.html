@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TLi Trading Tool{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-brand">TLi Trading Tool</h1>
+            <ul class="nav-menu">
+                <li><a href="{{ url_for('index') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('positions') }}">Positions</a></li>
+                <li><a href="{{ url_for('calculator') }}">Calculator</a></li>
+                <li><a href="{{ url_for('alerts') }}">Alerts</a></li>
+                <li><a href="{{ url_for('comments') }}">TLi Notes</a></li>
+                <li><a href="{{ url_for('email_parser_view') }}">Email Parser</a></li>
+                <li><a href="{{ url_for('levels') }}">Price Levels</a></li>
+            </ul>
+        </div>
+    </nav>
+    
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <script>
+        // Utility functions
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(value);
+        }
+        
+        function formatPercent(value) {
+            return value.toFixed(2) + '%';
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Positions - TLi Trading Tool{% endblock %}
+
+{% block content %}
+<h1>All Positions</h1>
+<a href="{{ url_for('add_position') }}" class="btn btn-primary">Add New Position</a>
+
+<div class="positions-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Type</th>
+                <th>Cap Size</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Shares</th>
+                <th>Cost Basis</th>
+                <th>P&L</th>
+                <th>Status</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for position in positions %}
+            <tr class="{% if position.status == 'closed' %}closed{% endif %}">
+                <td><strong>${{ position.symbol }}</strong></td>
+                <td>{{ position.position_type }}</td>
+                <td>
+                    {% if position.is_large_cap %}
+                    <span class="badge badge-large">Large</span>
+                    {% else %}
+                    <span class="badge badge-small">Small</span>
+                    {% endif %}
+                </td>
+                <td>${{ "%.2f"|format(position.entry_price) }}</td>
+                <td>
+                    {% if position.exit_price %}
+                    ${{ "%.2f"|format(position.exit_price) }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>{{ position.shares }}</td>
+                <td>${{ "%.2f"|format(position.cost_basis) }}</td>
+                <td>
+                    {% if position.pnl %}
+                    <span class="{% if position.pnl > 0 %}profit{% else %}loss{% endif %}">
+                        ${{ "%.2f"|format(position.pnl) }} ({{ "%.2f"|format(position.pnl_percent) }}%)
+                    </span>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="status-badge status-{{ position.status }}">{{ position.status }}</span>
+                </td>
+                <td>{{ position.created_at.strftime('%Y-%m-%d') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

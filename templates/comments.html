@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}TLi Notes - TLi Trading Tool{% endblock %}
+
+{% block content %}
+<h1>TLi Strategy Notes & Comments</h1>
+
+<div class="comments-section">
+    <h2>Add New Note</h2>
+    <div class="form">
+        <div class="form-group">
+            <label for="comment-symbol">Symbol (optional)</label>
+            <input type="text" id="comment-symbol" placeholder="e.g., AMD, NVDA">
+        </div>
+        
+        <div class="form-group">
+            <label for="comment-type">Type *</label>
+            <select id="comment-type">
+                <option value="long_term">Long Term Plan</option>
+                <option value="short_term">Short Term Expected Move</option>
+                <option value="pullback">Expected Pullback</option>
+                <option value="general">General Market Comment</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="comment-content">Comment *</label>
+            <textarea id="comment-content" rows="5" placeholder="Enter TLi's comments or your strategy notes..."></textarea>
+        </div>
+        
+        <button onclick="addComment()" class="btn btn-primary">Add Note</button>
+    </div>
+</div>
+
+<div class="comments-section">
+    <h2>All Notes</h2>
+    {% if comments %}
+    <div class="comments-list">
+        {% for comment in comments %}
+        <div class="comment-card">
+            <div class="comment-header">
+                {% if comment.symbol %}
+                <span class="symbol">${{ comment.symbol }}</span>
+                {% endif %}
+                <span class="badge badge-{{ comment.comment_type }}">{{ comment.comment_type.replace('_', ' ').title() }}</span>
+                <span class="date">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </div>
+            <div class="comment-content">{{ comment.content }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>No notes yet. Add your first note above!</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function addComment() {
+    const symbol = document.getElementById('comment-symbol').value.trim().toUpperCase();
+    const type = document.getElementById('comment-type').value;
+    const content = document.getElementById('comment-content').value.trim();
+    
+    if (!content) {
+        alert('Please enter comment content');
+        return;
+    }
+    
+    const response = await fetch('/comments/add', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            symbol: symbol || null,
+            comment_type: type,
+            content: content
+        })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+        location.reload();
+    }
+}
+</script>
+{% endblock %}
