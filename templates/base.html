@@ -18,6 +18,12 @@
                 <li><a href="{{ url_for('comments') }}">TLi Notes</a></li>
                 <li><a href="{{ url_for('email_parser_view') }}">Email Parser</a></li>
                 <li><a href="{{ url_for('levels') }}">Price Levels</a></li>
+                {% if current_user.is_authenticated %}
+                <li class="user-menu">
+                    <span class="user-name">{{ current_user.name or current_user.email }}</span>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </li>
+                {% endif %}
             </ul>
         </div>
     </nav>
