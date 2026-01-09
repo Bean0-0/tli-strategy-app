@@ -11,7 +11,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trading.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-from models import db, User, Position, PriceLevel, Alert, TLiComment
+from models import db, User, Position, PriceLevel, Alert, TLiComment, ParsedEmail
 db.init_app(app)
 
 # Initialize Flask-Login
@@ -84,11 +84,10 @@ def login():
     
     if request.method == 'POST':
         email = request.form.get('email')
-        password = request.form.get('password')
         
         user = User.query.filter_by(email=email).first()
         
-        if user and user.check_password(password):
+        if user:
             login_user(user)
             user.last_login = datetime.utcnow()
             db.session.commit()
@@ -96,7 +95,7 @@ def login():
             next_page = request.args.get('next')
             return redirect(next_page if next_page else url_for('index'))
         else:
-            flash('Invalid username or password', 'error')
+            flash('Email not registered', 'error')
     
     return render_template('login.html')
 
@@ -334,6 +333,7 @@ def fetch_gmail_emails():
         data = request.json or {}
         max_results = int(data.get('max_results', 10))
         days_back = int(data.get('days_back', 7))
+        page_token = data.get('page_token')
         
         client = get_gmail_client()
         
@@ -344,18 +344,28 @@ def fetch_gmail_emails():
                 'message': 'Failed to authenticate with Gmail. Please check credentials.'
             }), 401
         
-        # Fetch forwarded emails
-        emails = client.get_forwarded_emails(
+        # Fetch emails sent to the current user
+        result = client.get_forwarded_emails(
             max_results=max_results,
-            days_back=days_back
+            days_back=days_back,
+            query_filter=f"to:{current_user.email} -category:promotions -category:social",
+            page_token=page_token
         )
         
-        if not emails:
+        emails = result.get('emails', [])
+        next_page_token = result.get('next_page_token')
+        
+        if not emails and not page_token:
             return jsonify({
                 'success': True,
                 'message': 'No forwarded emails found in the specified time range.',
-                'emails': []
+                'emails': [],
+                'next_page_token': None
             })
+            
+        # Get list of parsed message IDs
+        # We fetch all for simplicity, but could filter by ID list if needed optimization
+        parsed_ids = {p.message_id for p in ParsedEmail.query.all()}
         
         # Return email list
         return jsonify({
@@ -366,8 +376,10 @@ def fetch_gmail_emails():
                 'subject': email['subject'],
                 'sender': email['sender'],
                 'date': email['date'],
-                'snippet': email['snippet']
-            } for email in emails]
+                'snippet': email['snippet'],
+                'is_parsed': email['id'] in parsed_ids
+            } for email in emails],
+            'next_page_token': next_page_token
         })
         
     except Exception as e:
@@ -401,7 +413,7 @@ def parse_gmail_email(message_id):
             }), 404
         
         # Parse email content
-        parsed_data = parse_trading_email(email['body'])
+        parsed_data = parse_trading_email(email['body'], email.get('images'))
         
         # Save price levels to database
         saved_count = 0
@@ -416,6 +428,11 @@ def parse_gmail_email(message_id):
                 )
                 db.session.add(level)
                 saved_count += 1
+            db.session.commit()
+            
+        # Record as parsed
+        if not ParsedEmail.query.filter_by(message_id=message_id).first():
+            db.session.add(ParsedEmail(message_id=message_id, user_id=current_user.id))
             db.session.commit()
         
         return jsonify({

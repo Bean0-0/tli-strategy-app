@@ -1,17 +1,115 @@
 """Email parser for extracting trading levels from forwarded emails"""
 import re
-from typing import Dict, List, Any
+import os
+import json
+import logging
+import base64
+from typing import Dict, List, Any, Optional
+import google.generativeai as genai
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
-def parse_trading_email(email_content: str) -> Dict[str, Any]:
+def parse_trading_email(email_content: str, email_images: List[Dict[str, str]] = None) -> Dict[str, Any]:
     """
     Parse trading email to extract symbols, levels, and notes
     
     Args:
         email_content: Raw email content
+        email_images: List of dicts with 'mime_type' and 'data' (base64) (optional)
     
     Returns:
         dict containing parsed data
+    """
+    # Check for Gemini API key
+    api_key = os.getenv('GEMINI_API_KEY')
+    
+    if api_key:
+        try:
+            return parse_with_ai(email_content, email_images, api_key)
+        except Exception as e:
+            logger.error(f"AI parsing failed: {e}. Falling back to regex.")
+            
+    # Fallback to regex parser
+    return parse_with_regex(email_content)
+
+def parse_with_ai(content: str, images: List[Dict[str, str]], api_key: str) -> Dict[str, Any]:
+    """Use Google Gemini AI to parse email content and images"""
+    
+    genai.configure(api_key=api_key)
+    
+    # Use Gemini 2.5 Flash as it appears to be the primary available model
+    generation_config = {
+        "temperature": 0.1,
+        "response_mime_type": "application/json"
+    }
+    
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        generation_config=generation_config
+    )
+    
+    system_prompt = """
+    You are an expert trading assistant. Extract trading signals from the email content and any attached charts/images.
+    Return a strictly valid JSON object with the following structure:
+    {
+        "symbols": ["AMD", "NVDA"],
+        "levels": [
+            {
+                "symbol": "AMD",
+                "type": "target", 
+                "price": 150.0,
+                "notes": "PT1"
+            },
+            {
+                "symbol": "AMD", 
+                "type": "stop_loss",
+                "price": 140.0,
+                "notes": "Stop"
+            }
+        ],
+        "notes": "Brief summary of the trade idea"
+    }
+    
+    Level types must be one of: 'target', 'entry', 'stop_loss', 'support', 'resistance'.
+    Analyze both the text and any provided images (charts) to extract accurate price levels.
+    """
+    
+    # Construct the content parts
+    parts = [system_prompt, f"Analyze this trading email:\n\n{content}"]
+    
+    if images:
+        parts.append(f"\n[Attached are {len(images)} images from the email. Use them to verify levels or find chart patterns.]")
+        for img in images:
+            try:
+                # Add image data
+                # Gmail API uses urlsafe base64, we need to decode it to bytes for Gemini
+                image_data = base64.urlsafe_b64decode(img['data'])
+                parts.append({
+                    'mime_type': img['mime_type'],
+                    'data': image_data
+                })
+            except Exception as e:
+                logger.warning(f"Failed to process image content: {e}")
+
+    try:
+        response = model.generate_content(parts)
+        
+        # Parse result
+        parsed = json.loads(response.text)
+        parsed['raw_content'] = content
+        return parsed
+        
+    except Exception as e:
+        logger.error(f"Gemini API error: {e}")
+        # Log response feedback if available
+        if 'response' in locals() and hasattr(response, 'prompt_feedback'):
+            logger.error(f"Prompt Feedback: {response.prompt_feedback}")
+        raise
+
+def parse_with_regex(email_content: str) -> Dict[str, Any]:
+    """
+    Legacy regex-based parser
     """
     result = {
         'symbols': [],

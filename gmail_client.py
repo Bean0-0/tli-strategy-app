@@ -114,20 +114,22 @@ class GmailClient:
             return False
     
     def get_forwarded_emails(self, max_results: int = 10, 
-                            days_back: int = 7, query_filter: str = None) -> List[Dict[str, Any]]:
+                            days_back: int = 7, query_filter: str = None, page_token: str = None) -> Dict[str, Any]:
         """
         Fetch forwarded emails from Gmail
         
         Args:
             max_results: Maximum number of emails to fetch
             days_back: Number of days to look back
+            query_filter: Custom query string
+            page_token: Page token for pagination
         
         Returns:
-            List of email dictionaries with parsed content
+            Dictionary containing emails list and next page token
         """
         if not self.service:
             if not self.authenticate():
-                return []
+                return {'emails': [], 'next_page_token': None}
         
         try:
             # Calculate date for query (format: YYYY/MM/DD)
@@ -149,14 +151,16 @@ class GmailClient:
             results = self.service.users().messages().list(
                 userId='me',
                 q=query,
-                maxResults=max_results
+                maxResults=max_results,
+                pageToken=page_token
             ).execute()
             
             messages = results.get('messages', [])
+            next_page_token = results.get('nextPageToken')
             
             if not messages:
                 logger.info('No forwarded emails found.')
-                return []
+                return {'emails': [], 'next_page_token': None}
             
             # Fetch full message details
             emails = []
@@ -165,11 +169,14 @@ class GmailClient:
                 if email_data:
                     emails.append(email_data)
             
-            return emails
+            return {
+                'emails': emails,
+                'next_page_token': next_page_token
+            }
             
         except HttpError as error:
             logger.error(f'An error occurred fetching emails: {error}')
-            return []
+            return {'emails': [], 'next_page_token': None}
     
     def _get_email_details(self, message_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -194,8 +201,9 @@ class GmailClient:
             sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
             date_str = next((h['value'] for h in headers if h['name'] == 'Date'), '')
             
-            # Extract body
+            # Extract body and images
             body = self._get_message_body(message['payload'])
+            images = self._get_message_images(message_id, message['payload'])
             
             # Get internal date (Unix timestamp in milliseconds)
             internal_date = int(message['internalDate']) / 1000
@@ -208,6 +216,7 @@ class GmailClient:
                 'date': date_str,
                 'received_date': received_date,
                 'body': body,
+                'images': images,
                 'snippet': message.get('snippet', ''),
                 'labels': message.get('labelIds', [])
             }
@@ -216,6 +225,51 @@ class GmailClient:
             logger.error(f'An error occurred getting email details: {error}')
             return None
     
+    def _get_message_images(self, message_id: str, payload: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Extract base64 encoded images from email payload
+        
+        Args:
+            message_id: Gmail message ID
+            payload: Email payload
+            
+        Returns:
+            List of dicts with 'mime_type' and 'data' (base64 string)
+        """
+        images = []
+        
+        if 'parts' in payload:
+            for part in payload['parts']:
+                mime_type = part.get('mimeType', '')
+                if mime_type.startswith('image/'):
+                    image_data = None
+                    if 'data' in part['body']:
+                        # Inline image data
+                        image_data = part['body']['data']
+                    elif 'attachmentId' in part['body']:
+                        # Download attachment
+                        try:
+                            attachment = self.service.users().messages().attachments().get(
+                                userId='me',
+                                messageId=message_id,
+                                id=part['body']['attachmentId']
+                            ).execute()
+                            image_data = attachment['data']
+                        except HttpError as error:
+                            logger.error(f'Error downloading attachment: {error}')
+                    
+                    if image_data:
+                        images.append({
+                            'mime_type': mime_type,
+                            'data': image_data
+                        })
+                
+                elif 'parts' in part:
+                    # Recursive search
+                    images.extend(self._get_message_images(message_id, part))
+        
+        return images
+
     def _decode_base64_body(self, data: str) -> str:
         """
         Safely decode base64 email body data

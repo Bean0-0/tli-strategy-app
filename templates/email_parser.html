@@ -23,15 +23,22 @@
             </div>
         </div>
         
-        <button id="test-connection-btn" class="btn btn-secondary">Test Connection</button>
-        <button id="fetch-gmail-btn" class="btn btn-primary">Fetch Emails</button>
+        <!-- Hidden buttons for manual use if needed -->
+        <div style="display:none;">
+            <button id="test-connection-btn" class="btn btn-secondary">Test Connection</button>
+            <button id="fetch-gmail-btn" class="btn btn-primary">Fetch Emails</button>
+        </div>
+        <div id="loading-indicator" style="display:none; text-align:center; padding: 1rem;">
+            <p>Loading more emails...</p>
+        </div>
     </div>
 </div>
 
 <!-- Gmail Results -->
 <div id="gmail-results" style="display:none;">
     <h3>Fetched Emails</h3>
-    <div id="emails-list"></div>
+    <div id="emails-list" style="max-height: 600px; overflow-y: auto;"></div>
+    <div id="scroll-sentinel"></div>
 </div>
 
 <hr style="margin: 2rem 0;">
@@ -95,89 +102,166 @@ async function testGmailConnection() {
     }
 }
 
+// Global state for pagination
+let nextPageToken = null;
+let isLoading = false;
+let observer = null;
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Initial fetch
+    fetchFromGmail(false);
+    
+    // Setup infinite scroll observer
+    const options = {
+        root: document.getElementById('emails-list'),
+        rootMargin: '100px',
+        threshold: 0.1
+    };
+    
+    observer = new IntersectionObserver(handleObserver, options);
+});
+
+function handleObserver(entries, observer) {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && nextPageToken && !isLoading) {
+            fetchFromGmail(true);
+        }
+    });
+}
+
 // Fetch emails from Gmail
-async function fetchFromGmail() {
+async function fetchFromGmail(isLoadMore = false) {
+    if (isLoading) return;
+    isLoading = true;
+    
+    const loadingIndicator = document.getElementById('loading-indicator');
+    loadingIndicator.style.display = 'block';
+    
     const maxResults = document.getElementById('max-results').value;
     const daysBack = document.getElementById('days-back').value;
     
     try {
+        const payload = {
+            max_results: parseInt(maxResults),
+            days_back: parseInt(daysBack)
+        };
+        
+        if (isLoadMore && nextPageToken) {
+            payload.page_token = nextPageToken;
+        }
+    
         const response = await fetch('/gmail/fetch-emails', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                max_results: parseInt(maxResults),
-                days_back: parseInt(daysBack)
-            })
+            body: JSON.stringify(payload)
         });
         
         const result = await response.json();
         
         if (!result.success) {
-            alert(`Error: ${result.message}`);
+            console.error(`Error: ${result.message}`);
             return;
         }
         
-        if (result.emails.length === 0) {
-            alert('No forwarded emails found in the specified time range.');
-            return;
-        }
+        // Update pagination token
+        nextPageToken = result.next_page_token;
         
         // Display emails
         const emailsList = document.getElementById('emails-list');
-        emailsList.textContent = '';
+        const gmailResults = document.getElementById('gmail-results');
+        gmailResults.style.display = 'block';
         
-        const emailsContainer = document.createElement('div');
-        emailsContainer.className = 'emails-list';
+        if (!isLoadMore) {
+            emailsList.textContent = '';
+        }
         
-        result.emails.forEach(email => {
-            const emailItem = document.createElement('div');
-            emailItem.className = 'email-item';
-            
-            const emailHeader = document.createElement('div');
-            emailHeader.className = 'email-header';
-            
-            const subject = document.createElement('strong');
-            subject.textContent = email.subject;
-            
-            const date = document.createElement('span');
-            date.className = 'email-date';
-            date.textContent = email.date;
-            
-            emailHeader.appendChild(subject);
-            emailHeader.appendChild(date);
-            
-            const emailFrom = document.createElement('div');
-            emailFrom.className = 'email-from';
-            emailFrom.textContent = 'From: ' + email.sender;
-            
-            const emailSnippet = document.createElement('div');
-            emailSnippet.className = 'email-snippet';
-            emailSnippet.textContent = email.snippet;
-            
-            const parseButton = document.createElement('button');
-            parseButton.className = 'btn btn-sm btn-primary';
-            parseButton.textContent = 'Parse This Email';
-            parseButton.dataset.messageId = email.id;
-            parseButton.addEventListener('click', function() {
-                parseGmailEmail(this.dataset.messageId);
+        if (result.emails.length === 0 && !isLoadMore) {
+            emailsList.innerHTML = '<p style="text-align:center; padding:1rem;">No emails found.</p>';
+        } else {
+            result.emails.forEach(email => {
+                const emailItem = document.createElement('div');
+                emailItem.className = 'email-item';
+                
+                const emailHeader = document.createElement('div');
+                emailHeader.className = 'email-header';
+                
+                const subject = document.createElement('strong');
+                subject.textContent = email.subject;
+                
+                const date = document.createElement('span');
+                date.className = 'email-date';
+                date.textContent = email.date;
+                
+                emailHeader.appendChild(subject);
+                emailHeader.appendChild(date);
+                
+                const emailFrom = document.createElement('div');
+                emailFrom.className = 'email-from';
+                emailFrom.textContent = 'From: ' + email.sender;
+                
+                const emailSnippet = document.createElement('div');
+                emailSnippet.className = 'email-snippet';
+                emailSnippet.textContent = email.snippet;
+                
+                const parseButton = document.createElement('button');
+                
+                if (email.is_parsed) {
+                    parseButton.className = 'btn btn-sm btn-outline-success';
+                    parseButton.innerHTML = 'Parsed <i class="fas fa-check"></i>';
+                    parseButton.title = "This email has already been processed";
+                } else {
+                    parseButton.className = 'btn btn-sm btn-primary';
+                    parseButton.textContent = 'Parse This Email';
+                }
+                
+                parseButton.dataset.messageId = email.id;
+                parseButton.addEventListener('click', function() {
+                    const btn = this;
+                    const originalText = btn.innerHTML;
+                    btn.textContent = 'Parsing...';
+                    btn.disabled = true;
+                    
+                    parseGmailEmail(this.dataset.messageId)
+                        .then(() => {
+                            // On success, mark as parsed
+                            btn.className = 'btn btn-sm btn-outline-success';
+                            btn.innerHTML = 'Parsed <i class="fas fa-check"></i>';
+                            btn.disabled = false;
+                        })
+                        .catch(() => {
+                            btn.innerHTML = originalText;
+                            btn.disabled = false;
+                        });
+                });
+                
+                emailItem.appendChild(emailHeader);
+                emailItem.appendChild(emailFrom);
+                emailItem.appendChild(emailSnippet);
+                emailItem.appendChild(parseButton);
+                
+                emailsList.appendChild(emailItem);
             });
-            
-            emailItem.appendChild(emailHeader);
-            emailItem.appendChild(emailFrom);
-            emailItem.appendChild(emailSnippet);
-            emailItem.appendChild(parseButton);
-            
-            emailsContainer.appendChild(emailItem);
-        });
+        }
         
-        emailsList.appendChild(emailsContainer);
-        document.getElementById('gmail-results').style.display = 'block';
+        // Monitor the last item for infinite scroll
+        if (nextPageToken) {
+            const lastItem = emailsList.lastElementChild;
+            if (lastItem) {
+                observer.disconnect();
+                observer.observe(lastItem);
+            }
+        } else {
+            observer.disconnect();
+        }
         
-        alert(`Found ${result.emails.length} forwarded emails. Click "Parse This Email" to extract trading data.`);
     } catch (error) {
-        alert(`Error fetching emails: ${error.message}`);
+        console.error(`Error fetching emails: ${error.message}`);
+    } finally {
+        isLoading = false;
+        loadingIndicator.style.display = 'none';
     }
 }
 
@@ -195,7 +279,7 @@ async function parseGmailEmail(messageId) {
         
         if (!result.success) {
             alert(`Error: ${result.message}`);
-            return;
+            throw new Error(result.message);
         }
         
         // Display the parsed data using safe DOM methods
@@ -203,12 +287,15 @@ async function parseGmailEmail(messageId) {
         
         document.getElementById('parse-results').style.display = 'block';
         
-        alert(result.message);
+        // alert(result.message); // Optional: remove alert if button change is enough feedback
         
         // Scroll to results
         document.getElementById('parse-results').scrollIntoView({ behavior: 'smooth' });
+        
+        return result; // Resolve
     } catch (error) {
         alert(`Error parsing email: ${error.message}`);
+        throw error; // Reject
     }
 }
 

@@ -133,3 +133,14 @@ class TLiComment(db.Model):
     
     def __repr__(self):
         return f'<TLiComment {self.symbol or "General"} - {self.comment_type}>'
+
+
+class ParsedEmail(db.Model):
+    """Log of parsed emails to avoid reprocessing"""
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.String(100), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    parsed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<ParsedEmail {self.message_id}>'
