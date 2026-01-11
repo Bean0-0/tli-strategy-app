@@ -5,7 +5,7 @@ import json
 import logging
 import base64
 from typing import Dict, List, Any, Optional
-import google.generativeai as genai
+import google.genai as genai
 
 # Configure logging
 logger = logging.getLogger(__name__)

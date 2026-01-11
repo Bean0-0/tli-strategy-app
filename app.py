@@ -22,7 +22,7 @@ login_manager.login_message = 'Please log in to access this page.'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Import helper modules
 from email_parser import parse_trading_email
@@ -89,7 +89,7 @@ def login():
         
         if user:
             login_user(user)
-            user.last_login = datetime.utcnow()
+            user.last_login = datetime.now(datetime.UTC)
             db.session.commit()
             
             next_page = request.args.get('next')
@@ -344,11 +344,12 @@ def fetch_gmail_emails():
                 'message': 'Failed to authenticate with Gmail. Please check credentials.'
             }), 401
         
-        # Fetch emails sent to the current user
+        # Fetch forwarded emails (emails with Fwd: or FW: in subject)
+        # Don't filter by recipient - we want all forwarded emails in the inbox
         result = client.get_forwarded_emails(
             max_results=max_results,
             days_back=days_back,
-            query_filter=f"to:{current_user.email} -category:promotions -category:social",
+            query_filter="-category:promotions -category:social",
             page_token=page_token
         )
         
