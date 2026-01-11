@@ -144,3 +144,73 @@ class ParsedEmail(db.Model):
 
     def __repr__(self):
         return f'<ParsedEmail {self.message_id}>'
+
+
+class StockEvaluation(db.Model):
+    """Stock evaluations combining TLI data with external analysis"""
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(10), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # TLI Data
+    tli_recommendation = db.Column(db.String(20))  # 'buy', 'sell', 'hold', 'wait'
+    tli_target_price = db.Column(db.Float)
+    tli_stop_loss = db.Column(db.Float)
+    tli_notes = db.Column(db.Text)
+    tli_confidence = db.Column(db.String(20))  # 'high', 'medium', 'low'
+    
+    # External Analysis
+    current_price = db.Column(db.Float)
+    price_change_pct = db.Column(db.Float)
+    volume = db.Column(db.BigInteger)
+    market_cap = db.Column(db.BigInteger)
+    pe_ratio = db.Column(db.Float)
+    
+    # Technical Indicators
+    rsi = db.Column(db.Float)  # Relative Strength Index
+    macd_signal = db.Column(db.String(20))  # 'bullish', 'bearish', 'neutral'
+    ma_50 = db.Column(db.Float)  # 50-day moving average
+    ma_200 = db.Column(db.Float)  # 200-day moving average
+    
+    # Cross-validation
+    overall_recommendation = db.Column(db.String(20))  # 'strong_buy', 'buy', 'hold', 'sell', 'strong_sell'
+    agreement_score = db.Column(db.Float)  # 0-100, how much TLI and technicals agree
+    risk_level = db.Column(db.String(20))  # 'low', 'medium', 'high'
+    flags = db.Column(db.Text)  # JSON array of warning flags
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = db.relationship('User', backref='stock_evaluations')
+    
+    def to_dict(self):
+        """Convert model to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'symbol': self.symbol,
+            'user_id': self.user_id,
+            'tli_recommendation': self.tli_recommendation,
+            'tli_target_price': self.tli_target_price,
+            'tli_stop_loss': self.tli_stop_loss,
+            'tli_notes': self.tli_notes,
+            'tli_confidence': self.tli_confidence,
+            'current_price': self.current_price,
+            'price_change_pct': self.price_change_pct,
+            'volume': self.volume,
+            'market_cap': self.market_cap,
+            'pe_ratio': self.pe_ratio,
+            'rsi': self.rsi,
+            'macd_signal': self.macd_signal,
+            'ma_50': self.ma_50,
+            'ma_200': self.ma_200,
+            'overall_recommendation': self.overall_recommendation,
+            'agreement_score': self.agreement_score,
+            'risk_level': self.risk_level,
+            'flags': self.flags,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def __repr__(self):
+        return f'<StockEvaluation {self.symbol} - {self.overall_recommendation}>'

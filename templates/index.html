@@ -1,103 +1,314 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - TLi Trading Tool{% endblock %}
+{% block title %}Stock Evaluation Dashboard - TLi Trading Tool{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <h1>Trading Dashboard</h1>
-    
-    <!-- Strategy Reminders -->
-    <div class="strategy-reminders">
-        <div class="reminder large-cap">
-            <h3>🚀 Large Cap Strategy (AMD, NVDA, etc.)</h3>
-            <p><strong>LET THEM RUN!</strong> Be patient with large caps. They have room to grow.</p>
-            <p>Current Large Cap Positions: {{ large_caps|length }}</p>
-        </div>
-        <div class="reminder small-cap">
-            <h3>⚡ Small Cap Strategy (OSCR, HIMS, etc.)</h3>
-            <p><strong>TRADE AGGRESSIVELY!</strong> Take profits, manage risk actively.</p>
-            <p>Current Small Cap Positions: {{ small_caps|length }}</p>
-        </div>
+<div class="dashboard-header">
+    <h1>📊 Stock Evaluation Dashboard</h1>
+    <p class="subtitle">AI-Powered Analysis Combining TLI Insights with Market Data</p>
+</div>
+
+<!-- Summary Stats -->
+<div class="stats-grid">
+    <div class="stat-card strong-buy">
+        <div class="stat-label">Strong Buys</div>
+        <div class="stat-value">{{ strong_buys|length }}</div>
     </div>
-    
-    <!-- Recent TLi Comments -->
-    <div class="section">
-        <h2>Recent TLi Notes</h2>
-        {% if comments %}
-        <div class="comments-list">
-            {% for comment in comments %}
-            <div class="comment-card">
-                <div class="comment-header">
-                    {% if comment.symbol %}
-                    <span class="symbol">${{ comment.symbol }}</span>
-                    {% endif %}
-                    <span class="type">{{ comment.comment_type.replace('_', ' ').title() }}</span>
-                    <span class="date">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-                </div>
-                <div class="comment-content">{{ comment.content }}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p>No comments yet. <a href="{{ url_for('comments') }}">Add your first note</a></p>
-        {% endif %}
+    <div class="stat-card buy">
+        <div class="stat-label">Buys</div>
+        <div class="stat-value">{{ buys|length }}</div>
     </div>
-    
-    <!-- Active Positions -->
-    <div class="section">
-        <h2>Open Positions</h2>
-        <a href="{{ url_for('add_position') }}" class="btn btn-primary">Add Position</a>
-        
-        {% if positions %}
-        <div class="positions-grid">
-            {% for position in positions %}
-            {% if position.status == 'open' %}
-            <div class="position-card {% if position.is_large_cap %}large-cap{% else %}small-cap{% endif %}">
-                <div class="position-header">
-                    <h3>${{ position.symbol }}</h3>
-                    <span class="badge">{{ position.position_type }}</span>
-                    {% if position.is_large_cap %}
-                    <span class="badge badge-large">Large Cap</span>
-                    {% else %}
-                    <span class="badge badge-small">Small Cap</span>
-                    {% endif %}
-                </div>
-                <div class="position-details">
-                    <p><strong>Entry:</strong> ${{ "%.2f"|format(position.entry_price) }}</p>
-                    <p><strong>Shares:</strong> {{ position.shares }}</p>
-                    <p><strong>Cost Basis:</strong> ${{ "%.2f"|format(position.cost_basis) }}</p>
-                    {% if position.notes %}
-                    <p class="notes">{{ position.notes }}</p>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-            {% endfor %}
-        </div>
-        {% else %}
-        <p>No open positions.</p>
-        {% endif %}
+    <div class="stat-card hold">
+        <div class="stat-label">Holds</div>
+        <div class="stat-value">{{ holds|length }}</div>
     </div>
-    
-    <!-- Active Alerts -->
-    <div class="section">
-        <h2>Active Alerts</h2>
-        {% if alerts %}
-        <div class="alerts-list">
-            {% for alert in alerts %}
-            <div class="alert-item">
-                <span class="symbol">${{ alert.symbol }}</span>
-                <span class="price">${{ "%.2f"|format(alert.price) }}</span>
-                <span class="type">{{ alert.alert_type.replace('_', ' ').title() }}</span>
-                {% if alert.notes %}
-                <span class="notes">{{ alert.notes }}</span>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p>No active alerts. <a href="{{ url_for('alerts') }}">Set up alerts</a></p>
-        {% endif %}
+    <div class="stat-card sell">
+        <div class="stat-label">Sells</div>
+        <div class="stat-value">{{ sells|length }}</div>
+    </div>
+    <div class="stat-card neutral">
+        <div class="stat-label">Analyzed Stocks</div>
+        <div class="stat-value">{{ evaluations|length }}</div>
     </div>
 </div>
+
+<!-- Action Items -->
+{% if strong_buys or buys %}
+<div class="section">
+    <h2>🚀 Strong Opportunities</h2>
+    <div class="evaluation-grid">
+        {% for eval in strong_buys %}
+        <div class="eval-card strong-buy-card">
+            {{ render_evaluation(eval, 'STRONG BUY') }}
+        </div>
+        {% endfor %}
+        {% for eval in buys %}
+        <div class="eval-card buy-card">
+            {{ render_evaluation(eval, 'BUY') }}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Main Evaluations Table -->
+<div class="section">
+    <h2>📈 All Stock Evaluations</h2>
+    <div class="table-container">
+        <table class="eval-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Recommendation</th>
+                    <th>TLI Signal</th>
+                    <th>Current Price</th>
+                    <th>Target Price</th>
+                    <th>Upside</th>
+                    <th>Agreement</th>
+                    <th>Risk</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for eval in evaluations %}
+                <tr class="eval-row {{ eval.overall_recommendation|replace('_', '-') }}">
+                    <td class="symbol-cell">
+                        <strong>{{ eval.symbol }}</strong>
+                    </td>
+                    <td>
+                        <span class="recommendation-badge {{ eval.overall_recommendation|replace('_', '-') }}">
+                            {{ eval.overall_recommendation|upper|replace('_', ' ') }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="tli-signal">{{ eval.tli_recommendation|upper }}</span>
+                    </td>
+                    <td>
+                        {% if eval.current_price %}
+                            ${{ "%.2f"|format(eval.current_price) }}
+                            {% if eval.price_change_pct %}
+                                <span class="price-change {{ 'positive' if eval.price_change_pct > 0 else 'negative' }}">
+                                    {{ "%+.1f"|format(eval.price_change_pct) }}%
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if eval.tli_target_price %}
+                            ${{ "%.2f"|format(eval.tli_target_price) }}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if eval.current_price and eval.tli_target_price %}
+                            {% set upside = ((eval.tli_target_price - eval.current_price) / eval.current_price * 100) %}
+                            <span class="upside {{ 'positive' if upside > 0 else 'negative' }}">
+                                {{ "%+.1f"|format(upside) }}%
+                            </span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="agreement-bar">
+                            <div class="agreement-fill" style="width: {{ eval.agreement_score }}%"></div>
+                            <span class="agreement-text">{{ "%.0f"|format(eval.agreement_score) }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="risk-badge risk-{{ eval.risk_level }}">
+                            {{ eval.risk_level|upper }}
+                        </span>
+                    </td>
+                    <td class="text-small">
+                        {{ eval.updated_at.strftime('%m/%d %H:%M') if eval.updated_at else 'N/A' }}
+                    </td>
+                    <td>
+                        <button class="btn-small btn-details" onclick="showDetails('{{ eval.symbol }}', {{ eval.id }})">
+                            Details
+                        </button>
+                        <button class="btn-small btn-refresh" onclick="refreshAnalysis('{{ eval.symbol }}')">
+                            ↻
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if not evaluations %}
+<div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <h3>No Stock Evaluations Yet</h3>
+    <p>Parse TLI emails to start analyzing stocks</p>
+    <a href="{{ url_for('email_parser_view') }}" class="btn btn-primary">Go to Email Parser</a>
+</div>
+{% endif %}
+
+<!-- Details Modal -->
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal()">&times;</span>
+        <div id="modalBody">
+            <!-- Content loaded dynamically -->
+        </div>
+    </div>
+</div>
+
 {% endblock %}
+
+{% block scripts %}
+<script>
+function showDetails(symbol, evalId) {
+    const modal = document.getElementById('detailsModal');
+    const modalBody = document.getElementById('modalBody');
+    
+    // Find evaluation data
+    const evaluations = {{ evaluations_dict|tojson|safe }};
+    const eval = evaluations.find(e => e.id === evalId);
+    
+    if (!eval) return;
+    
+    // Parse flags
+    let flags = [];
+    try {
+        flags = JSON.parse(eval.flags || '[]');
+    } catch(e) {
+        flags = [];
+    }
+    
+    // Build modal content
+    let html = `
+        <div class="detail-header">
+            <h2>${symbol}</h2>
+            <span class="recommendation-badge ${eval.overall_recommendation.replace('_', '-')}">
+                ${eval.overall_recommendation.toUpperCase().replace('_', ' ')}
+            </span>
+        </div>
+        
+        <div class="detail-grid">
+            <div class="detail-section">
+                <h3>🎯 TLI Analysis</h3>
+                <table class="detail-table">
+                    <tr><td>Recommendation:</td><td><strong>${eval.tli_recommendation.toUpperCase()}</strong></td></tr>
+                    <tr><td>Target Price:</td><td>$${eval.tli_target_price ? eval.tli_target_price.toFixed(2) : 'N/A'}</td></tr>
+                    <tr><td>Stop Loss:</td><td>$${eval.tli_stop_loss ? eval.tli_stop_loss.toFixed(2) : 'N/A'}</td></tr>
+                    <tr><td>Confidence:</td><td>${eval.tli_confidence.toUpperCase()}</td></tr>
+                </table>
+                ${eval.tli_notes ? `<p class="notes"><strong>Notes:</strong> ${eval.tli_notes}</p>` : ''}
+            </div>
+            
+            <div class="detail-section">
+                <h3>💹 Market Data</h3>
+                <table class="detail-table">
+                    <tr><td>Current Price:</td><td>$${eval.current_price ? eval.current_price.toFixed(2) : 'N/A'}</td></tr>
+                    <tr><td>24h Change:</td><td class="${eval.price_change_pct > 0 ? 'positive' : 'negative'}">${eval.price_change_pct ? eval.price_change_pct.toFixed(2) + '%' : 'N/A'}</td></tr>
+                    <tr><td>Volume:</td><td>${eval.volume ? eval.volume.toLocaleString() : 'N/A'}</td></tr>
+                    <tr><td>Market Cap:</td><td>${eval.market_cap ? '$' + (eval.market_cap / 1e9).toFixed(2) + 'B' : 'N/A'}</td></tr>
+                    <tr><td>P/E Ratio:</td><td>${eval.pe_ratio ? eval.pe_ratio.toFixed(2) : 'N/A'}</td></tr>
+                </table>
+            </div>
+            
+            <div class="detail-section">
+                <h3>📊 Technical Indicators</h3>
+                <table class="detail-table">
+                    <tr><td>RSI:</td><td>${eval.rsi ? eval.rsi.toFixed(2) : 'N/A'}</td></tr>
+                    <tr><td>MACD Signal:</td><td>${eval.macd_signal ? eval.macd_signal.toUpperCase() : 'N/A'}</td></tr>
+                    <tr><td>50-Day MA:</td><td>$${eval.ma_50 ? eval.ma_50.toFixed(2) : 'N/A'}</td></tr>
+                    <tr><td>200-Day MA:</td><td>$${eval.ma_200 ? eval.ma_200.toFixed(2) : 'N/A'}</td></tr>
+                </table>
+            </div>
+            
+            <div class="detail-section full-width">
+                <h3>⚠️ Analysis Flags</h3>
+                ${flags.length > 0 ? 
+                    '<ul class="flags-list">' + flags.map(f => `<li>${f}</li>`).join('') + '</ul>' :
+                    '<p class="text-muted">No flags or warnings</p>'
+                }
+            </div>
+            
+            <div class="detail-section full-width">
+                <h3>📈 Risk/Reward Analysis</h3>
+                ${eval.current_price && eval.tli_target_price && eval.tli_stop_loss ? `
+                    <div class="rr-analysis">
+                        <p><strong>Potential Gain:</strong> $${(eval.tli_target_price - eval.current_price).toFixed(2)} (${((eval.tli_target_price - eval.current_price) / eval.current_price * 100).toFixed(1)}%)</p>
+                        <p><strong>Potential Loss:</strong> $${(eval.current_price - eval.tli_stop_loss).toFixed(2)} (${((eval.current_price - eval.tli_stop_loss) / eval.current_price * 100).toFixed(1)}%)</p>
+                        <p><strong>Risk/Reward Ratio:</strong> ${((eval.tli_target_price - eval.current_price) / (eval.current_price - eval.tli_stop_loss)).toFixed(2)}:1</p>
+                    </div>
+                ` : '<p class="text-muted">Insufficient data for risk/reward calculation</p>'}
+            </div>
+        </div>
+        
+        <div class="detail-footer">
+            <p class="text-small">Last updated: ${new Date(eval.updated_at).toLocaleString()}</p>
+        </div>
+    `;
+    
+    modalBody.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('detailsModal').style.display = 'none';
+}
+
+async function refreshAnalysis(symbol) {
+    try {
+        const response = await fetch(`/refresh-analysis/${symbol}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    } catch (error) {
+        alert('Error refreshing analysis: ' + error.message);
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('detailsModal');
+    if (event.target === modal) {
+        closeModal();
+    }
+}
+</script>
+{% endblock %}
+
+{% macro render_evaluation(eval, label) %}
+<div class="eval-card-header">
+    <div class="symbol-large">{{ eval.symbol }}</div>
+    <div class="recommendation-large">{{ label }}</div>
+</div>
+<div class="eval-card-body">
+    <div class="price-info">
+        {% if eval.current_price %}
+        <div class="current-price">${{ "%.2f"|format(eval.current_price) }}</div>
+        {% endif %}
+        {% if eval.tli_target_price %}
+        <div class="target-price">Target: ${{ "%.2f"|format(eval.tli_target_price) }}</div>
+        {% endif %}
+    </div>
+    <div class="metrics">
+        <div class="metric">
+            <span class="metric-label">Agreement</span>
+            <span class="metric-value">{{ "%.0f"|format(eval.agreement_score) }}%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Risk</span>
+            <span class="metric-value risk-{{ eval.risk_level }}">{{ eval.risk_level|upper }}</span>
+        </div>
+    </div>
+</div>
+<div class="eval-card-footer">
+    <button onclick="showDetails('{{ eval.symbol }}', {{ eval.id }})" class="btn-details-small">View Details</button>
+</div>
+{% endmacro %}

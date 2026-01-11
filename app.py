@@ -1,9 +1,12 @@
 """TLi Trading Strategy Management Tool - Main Application"""
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -11,7 +14,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trading.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-from models import db, User, Position, PriceLevel, Alert, TLiComment, ParsedEmail
+from models import db, User, PriceLevel, ParsedEmail, StockEvaluation
 db.init_app(app)
 
 # Initialize Flask-Login
@@ -26,8 +29,8 @@ def load_user(user_id):
 
 # Import helper modules
 from email_parser import parse_trading_email
-from position_calculator import calculate_position_size
 from gmail_client import get_gmail_client
+from stock_analyzer import StockAnalyzer, extract_tli_recommendation
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -89,7 +92,7 @@ def login():
         
         if user:
             login_user(user)
-            user.last_login = datetime.now(datetime.UTC)
+            user.last_login = datetime.now(timezone.utc)
             db.session.commit()
             
             next_page = request.args.get('next')
@@ -112,151 +115,87 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    """Dashboard - Main view"""
-    # Show user-specific data
-    positions = Position.query.filter_by(user_id=current_user.id).order_by(Position.created_at.desc()).all()
-    alerts = Alert.query.filter_by(user_id=current_user.id, triggered=False).order_by(Alert.price).all()
-    recent_comments = TLiComment.query.filter_by(user_id=current_user.id).order_by(TLiComment.created_at.desc()).limit(5).all()
+    """Stock Evaluation Dashboard - Main view"""
+    # Get recent stock evaluations
+    evaluations = StockEvaluation.query.filter_by(
+        user_id=current_user.id
+    ).order_by(StockEvaluation.updated_at.desc()).limit(20).all()
     
-    # Separate large cap and small cap positions
-    large_caps = [p for p in positions if p.is_large_cap]
-    small_caps = [p for p in positions if not p.is_large_cap]
+    # Categorize by recommendation
+    strong_buys = [e for e in evaluations if e.overall_recommendation == 'strong_buy']
+    buys = [e for e in evaluations if e.overall_recommendation == 'buy']
+    holds = [e for e in evaluations if e.overall_recommendation == 'hold']
+    sells = [e for e in evaluations if e.overall_recommendation in ['sell', 'strong_sell']]
     
-    return render_template('index.html', 
-                         positions=positions,
-                         large_caps=large_caps,
-                         small_caps=small_caps,
-                         alerts=alerts,
-                         comments=recent_comments)
+    # Get latest parsed emails count
+    recent_emails = ParsedEmail.query.filter_by(user_id=current_user.id).count()
+    
+    # Convert evaluations to dictionaries for JSON serialization
+    evaluations_dict = [e.to_dict() for e in evaluations]
+    
+    return render_template('index.html',
+                         evaluations=evaluations,
+                         evaluations_dict=evaluations_dict,
+                         strong_buys=strong_buys,
+                         buys=buys,
+                         holds=holds,
+                         sells=sells,
+                         recent_emails=recent_emails)
 
 
-@app.route('/positions')
+@app.route('/refresh-analysis/<symbol>')
 @login_required
-def positions():
-    """View all positions"""
-    all_positions = Position.query.filter_by(user_id=current_user.id).order_by(Position.created_at.desc()).all()
-    return render_template('positions.html', positions=all_positions)
-
-
-@app.route('/positions/add', methods=['GET', 'POST'])
-@login_required
-def add_position():
-    """Add new position"""
-    if request.method == 'POST':
-        data = request.form
-        position = Position(
+def refresh_analysis(symbol):
+    """Refresh analysis for a specific symbol"""
+    try:
+        # Get latest price levels for this symbol
+        levels = PriceLevel.query.filter_by(
             user_id=current_user.id,
-            symbol=data['symbol'].upper(),
-            position_type=data['position_type'],
-            entry_price=float(data['entry_price']),
-            shares=int(data['shares']),
-            notes=data.get('notes', ''),
-            is_large_cap=data.get('is_large_cap') == 'on'
-        )
-        db.session.add(position)
+            symbol=symbol
+        ).order_by(PriceLevel.created_at.desc()).all()
+        
+        if not levels:
+            return jsonify({'success': False, 'message': 'No TLI data found for this symbol'}), 404
+        
+        # Reconstruct parsed data from levels
+        parsed_data = {
+            'symbols': [symbol],
+            'levels': [{'symbol': l.symbol, 'type': l.level_type, 'price': l.price, 'notes': l.notes} for l in levels],
+            'notes': ' | '.join(l.notes for l in levels if l.notes)
+        }
+        
+        # Extract TLI recommendation
+        tli_data = extract_tli_recommendation(parsed_data, symbol)
+        
+        # Analyze with external data
+        analyzer = StockAnalyzer()
+        analysis = analyzer.analyze_stock(symbol, tli_data)
+        
+        # Update or create evaluation
+        evaluation = StockEvaluation.query.filter_by(
+            user_id=current_user.id,
+            symbol=symbol
+        ).first()
+        
+        if not evaluation:
+            evaluation = StockEvaluation(user_id=current_user.id, symbol=symbol)
+        
+        # Update fields
+        for key, value in analysis.items():
+            if hasattr(evaluation, key):
+                setattr(evaluation, key, value)
+        
+        evaluation.updated_at = datetime.utcnow()
+        
+        if not evaluation.id:
+            db.session.add(evaluation)
         db.session.commit()
-        return redirect(url_for('positions'))
-    
-    return render_template('add_position.html')
-
-
-@app.route('/positions/<int:position_id>/update', methods=['POST'])
-@login_required
-def update_position(position_id):
-    """Update position"""
-    position = Position.query.filter_by(id=position_id, user_id=current_user.id).first_or_404()
-    data = request.json
-    
-    if 'exit_price' in data:
-        position.exit_price = float(data['exit_price'])
-        position.status = 'closed'
-        position.closed_at = datetime.utcnow()
-    if 'notes' in data:
-        position.notes = data['notes']
-    
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@app.route('/calculator')
-@login_required
-def calculator():
-    """Position sizing calculator"""
-    return render_template('calculator.html')
-
-
-@app.route('/calculator/calculate', methods=['POST'])
-@login_required
-def calculate():
-    """Calculate position size"""
-    data = request.json
-    account_size = float(data['account_size'])
-    risk_percent = float(data['risk_percent'])
-    entry_price = float(data['entry_price'])
-    stop_loss = float(data['stop_loss'])
-    
-    result = calculate_position_size(account_size, risk_percent, entry_price, stop_loss)
-    return jsonify(result)
-
-
-@app.route('/alerts')
-@login_required
-def alerts():
-    """View and manage alerts"""
-    active_alerts = Alert.query.filter_by(user_id=current_user.id, triggered=False).order_by(Alert.symbol, Alert.price).all()
-    triggered_alerts = Alert.query.filter_by(user_id=current_user.id, triggered=True).order_by(Alert.triggered_at.desc()).limit(20).all()
-    return render_template('alerts.html', active_alerts=active_alerts, triggered_alerts=triggered_alerts)
-
-
-@app.route('/alerts/add', methods=['POST'])
-@login_required
-def add_alert():
-    """Add new price alert"""
-    data = request.json
-    alert = Alert(
-        user_id=current_user.id,
-        symbol=data['symbol'].upper(),
-        price=float(data['price']),
-        alert_type=data['alert_type'],
-        notes=data.get('notes', '')
-    )
-    db.session.add(alert)
-    db.session.commit()
-    return jsonify({'success': True, 'alert_id': alert.id})
-
-
-@app.route('/alerts/<int:alert_id>/delete', methods=['POST'])
-@login_required
-def delete_alert(alert_id):
-    """Delete alert"""
-    alert = Alert.query.filter_by(id=alert_id, user_id=current_user.id).first_or_404()
-    db.session.delete(alert)
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@app.route('/comments')
-@login_required
-def comments():
-    """View TLi comments and notes"""
-    all_comments = TLiComment.query.filter_by(user_id=current_user.id).order_by(TLiComment.created_at.desc()).all()
-    return render_template('comments.html', comments=all_comments)
-
-
-@app.route('/comments/add', methods=['POST'])
-@login_required
-def add_comment():
-    """Add TLi comment/note"""
-    data = request.json
-    comment = TLiComment(
-        user_id=current_user.id,
-        symbol=data.get('symbol', '').upper() if data.get('symbol') else None,
-        comment_type=data['comment_type'],
-        content=data['content']
-    )
-    db.session.add(comment)
-    db.session.commit()
-    return jsonify({'success': True, 'comment_id': comment.id})
+        
+        return jsonify({'success': True, 'message': f'Analysis refreshed for {symbol}'})
+        
+    except Exception as e:
+        logger.error(f"Error refreshing analysis: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/email-parser')
@@ -269,7 +208,7 @@ def email_parser_view():
 @app.route('/email-parser/parse', methods=['POST'])
 @login_required
 def parse_email():
-    """Parse email for trading levels"""
+    """Parse email for trading levels and create stock evaluation"""
     data = request.json
     email_content = data['email_content']
     
@@ -286,6 +225,36 @@ def parse_email():
                 notes=level_data.get('notes', '')
             )
             db.session.add(level)
+        db.session.commit()
+        
+        # Create stock evaluations for each symbol
+        analyzer = StockAnalyzer()
+        for symbol in parsed_data['symbols']:
+            try:
+                tli_data = extract_tli_recommendation(parsed_data, symbol)
+                analysis = analyzer.analyze_stock(symbol, tli_data)
+                
+                # Update or create evaluation
+                evaluation = StockEvaluation.query.filter_by(
+                    user_id=current_user.id,
+                    symbol=symbol
+                ).first()
+                
+                if not evaluation:
+                    evaluation = StockEvaluation(user_id=current_user.id, symbol=symbol)
+                
+                for key, value in analysis.items():
+                    if hasattr(evaluation, key):
+                        setattr(evaluation, key, value)
+                
+                evaluation.updated_at = datetime.now(timezone.utc)
+                
+                if not evaluation.id:
+                    db.session.add(evaluation)
+                    
+            except Exception as e:
+                logger.error(f"Error analyzing {symbol}: {e}")
+        
         db.session.commit()
     
     return jsonify(parsed_data)
@@ -429,6 +398,36 @@ def parse_gmail_email(message_id):
                 )
                 db.session.add(level)
                 saved_count += 1
+            db.session.commit()
+            
+            # Create stock evaluations for each symbol
+            analyzer = StockAnalyzer()
+            for symbol in parsed_data['symbols']:
+                try:
+                    tli_data = extract_tli_recommendation(parsed_data, symbol)
+                    analysis = analyzer.analyze_stock(symbol, tli_data)
+                    
+                    # Update or create evaluation
+                    evaluation = StockEvaluation.query.filter_by(
+                        user_id=current_user.id,
+                        symbol=symbol
+                    ).first()
+                    
+                    if not evaluation:
+                        evaluation = StockEvaluation(user_id=current_user.id, symbol=symbol)
+                    
+                    for key, value in analysis.items():
+                        if hasattr(evaluation, key):
+                            setattr(evaluation, key, value)
+                    
+                    evaluation.updated_at = datetime.utcnow()
+                    
+                    if not evaluation.id:
+                        db.session.add(evaluation)
+                        
+                except Exception as e:
+                    logger.error(f"Error analyzing {symbol}: {e}")
+            
             db.session.commit()
             
         # Record as parsed
